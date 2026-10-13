@@ -1,6 +1,6 @@
 # Project Rules
 
-Conventions for working in the Airwave Agents / OnAir AI repository.
+Conventions for working in the Airwave Agents repository.
 
 ## Secrets
 

@@ -1,6 +1,6 @@
 # transmiter
 
-The OnAir AI **transmitter** — the Android app broadcasters run to push the live stream
+The Airwave Agents **transmitter** — the Android app broadcasters run to push the live stream
 (with the Gemini co-host mixed in) to Icecast/Shoutcast. Standard Android Gradle project
 (Kotlin, with a C++/NDK streaming layer under `app/`).
 

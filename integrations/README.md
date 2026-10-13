@@ -1,6 +1,6 @@
 # integrations
 
-Client integrations that connect to the OnAir AI platform.
+Client integrations that connect to the Airwave Agents platform.
 
 - `transmiter/` — the Android **transmitter** app (Kotlin + C++). Broadcasters use it to push
   the live stream, with the Gemini co-host mixed in, to Icecast/Shoutcast. Public — lives in this repo.

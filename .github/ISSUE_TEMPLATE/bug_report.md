@@ -1,6 +1,6 @@
 ---
 name: Bug report
-about: Report a problem with OnAir AI
+about: Report a problem with Airwave Agents
 title: "[Bug] "
 labels: bug
 ---

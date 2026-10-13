@@ -9,7 +9,7 @@ reduce common mistakes, plus Airwave Agents project specifics.
 
 ## Project context
 
-**Airwave Agents** builds **OnAir AI** — a Gemini-powered AI radio co-host that helps stations
+**Airwave Agents** is a Gemini-powered AI radio co-host that helps stations
 stay live 24/7, engaging listeners in their own language, on top of our Icecast/Shoutcast
 streaming stack.
 

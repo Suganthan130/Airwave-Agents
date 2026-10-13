@@ -1,6 +1,6 @@
 # Airwave Agents
 
-**Product: OnAir AI** — a Gemini-powered AI radio co-host.
+A Gemini-powered AI radio co-host.
 
 ## About the team
 

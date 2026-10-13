@@ -1,6 +1,6 @@
 ---
 name: Feature request
-about: Suggest an idea for OnAir AI
+about: Suggest an idea for Airwave Agents
 title: "[Feature] "
 labels: enhancement
 ---
