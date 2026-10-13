@@ -1,0 +1,47 @@
+# === Gradle / build ===
+.gradle/
+/build/
+build/
+/captures/
+*.iml
+
+# === Native (C++ / NDK) build outputs ===
+.cxx/
+.externalNativeBuild/
+
+# === Local config ===
+/local.properties
+local.properties
+
+# === Android Studio / IntelliJ ===
+.idea/caches/
+.idea/libraries/
+.idea/modules.xml
+.idea/workspace.xml
+.idea/navEditor.xml
+.idea/assetWizardSettings.xml
+*.hprof
+
+# === Secrets & credentials (NEVER commit) ===
+*.env
+.env
+.env.*
+*.key
+*.pem
+*service-account*.json
+google-services.json
+GoogleService-Info.plist
+secrets.properties
+keystore.properties
+apikeys.properties
+
+# === Signing keystores ===
+*.jks
+*.keystore
+
+# === OS ===
+.DS_Store
+Thumbs.db
+
+# === Logs ===
+*.log

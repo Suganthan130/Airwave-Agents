@@ -1,0 +1,39 @@
+# === Secrets & credentials ===
+.env
+.env.*
+*.env
+*.key
+*.pem
+**/apikeys*
+**/api_keys*
+*service-account*.json
+service-account.json
+google-services.json
+GoogleService-Info.plist
+.firebaserc
+
+# Android signing
+*.jks
+*.keystore
+
+# === Python ===
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+
+# === Node / web ===
+node_modules/
+dist/
+build/
+
+# === Logs ===
+logs/
+*.log
+
+# === OS / editor ===
+.DS_Store
+.idea/
+.vscode/

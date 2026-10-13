@@ -1,0 +1,11 @@
+# CODEOWNERS for Airwave Agents
+# Lines are matched last-to-first; the last matching pattern wins.
+# Replace @airwave-agents with real GitHub teams or usernames.
+
+*                           @airwave-agents
+
+/services/agent-api/        @airwave-agents
+/apps/web/                  @airwave-agents
+/integrations/android/      @airwave-agents
+/infra/                     @airwave-agents
+/docs/                      @airwave-agents
