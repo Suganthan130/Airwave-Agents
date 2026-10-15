@@ -89,12 +89,12 @@ with a placeholder + no-op engine. The native Gradle build is gated on
   - Configurable speaking speed (0.8x Relaxed, 1.0x Normal, 1.15x Radio Fast, 1.3x High Energy).
   - Manual on-demand button ("🎙️ Time Check") on the broadcast console.
   - Automated periodic scheduling (:00, :15, :30, :45 clock boundaries while live on-air).
-- **AI Flash News & Breaking News Bulletins (`FlashNews` & `HiruNewsManager`)**:
+- **AI Flash News & Breaking News Bulletins (`FlashNews` & `NewsManager`)**:
   - Dedicated **AI Co-Host & News Tab** on the main navigation bar (`AiStudioScreen`).
-  - Native on-device Hiru News Flash Ticker parser (directly on Android, no cloud proxy) watching `hirunews.lk/en/`.
-  - Background ticker watcher running every 60s to detect new breaking news arrivals.
-  - **Breaking News Pop-up Alert**: Automatically prompts the broadcaster with an alert modal when a new flash news arrives.
-  - **"Play Now (Interrupt & Resume)"**: Pauses the current song, saves its playback position, generates the flash news bulletin with breaking alert music cue and smooth outro, broadcasts it immediately on-air, and automatically resumes the previous song at its exact saved position when the news ends.
+  - Real-time Cloud Firestore synchronization of 12+ curated global and tech news stories under the `news` collection with real-time updates and offline fallbacks.
+  - **1-Minute Live Broadcast Auto-Popup**: When broadcaster goes live on-air (`connState == 1`), automatically triggers a breaking news alert modal every 1 minute cycling through stories.
+  - **"Play Now (Pause & Resume)"**: Seamlessly voices bulletin in background without dead air, pauses current song, plays news on-air, and automatically resumes music when bulletin finishes.
+  - **"Add to Up Next"**: Voices bulletin and places it into Up Next for smooth sequential playback after the active track.
   - **"🎧 Listen / Preview"**: Broadcasters can listen to the generated news bulletin locally through their device before putting it on air.
   - Gemini 2.5 Flash crafts a 3-part live radio script with breaking alert stinger, 2 factual news sentences, and a smooth radio outro sign-off returning listeners to the music.
   - Synthesized via Google Cloud TTS (44.1 kHz broadcast MP3 with SSML audio stinger).
@@ -227,6 +227,21 @@ Integrated Web URL: `https://airwave-agents.web.app/api/v1`
 - **Real-Time Synchronization**: `AiStudioScreen.kt` and `SettingsScreen.kt` immediately persist voice personality and speech speed to `stations/{uid}` and `users/{uid}` in Firestore upon segmented pill changes.
 - **Client & Web Forwarding**: `ChatOnAirManager.kt` and `App.tsx` pass `voice` and `speakingRate` to `/api/v1/process-message`, with Cloud Run reading station document settings as automatic fallback.
 - **Token Budget Protection**: Increased Gemini 2.5 Flash `max_output_tokens` to `4096` to accommodate internal chain-of-thought reasoning tokens and prevent multiline poem/story truncation.
+
+### AI Full Takeover (Auto-Pilot) Mode
+- **Autonomous Station Operation**: Master toggle in `AiStudioScreen.kt` allowing the AI Co-Host to fully run live broadcasts 24/7 without manual broadcaster intervention.
+- **Customizable News Interval**: Broadcasters can customize news bulletin frequency (`5m`, `10m` [default], `15m`, `20m`, `30m`). When active, `RjScheduler` automatically pulls unbroadcast Firestore news stories, voices them via Gemini + TTS, and plays or queues them.
+- **Customizable RJ Time Check Interval**: Configurable interval (`10m`, `15m`, `30m` [default], `45m`, `60m`) where the AI RJ announces the projected time, now-playing track, and upcoming track, with built-in validation preventing time check overlaps near track endings.
+- **News Delivery Styles**: Broadcasters can toggle between **Play Now** (interrupts music and automatically resumes the interrupted track from the saved position) or **Add to Up Next** (enqueues sequentially).
+- **Continuous Playlist Replay (Auto-Replay)**: Loop toggle (default ON) that automatically restarts the playlist from index 0 when the last track ends, guaranteeing zero dead air.
+### Intelligent Listener Song Requests & Dynamic On-Air Play Next
+- **Dual-Case Song Request Resolution**:
+  - When listeners send song requests in live chat (in English, Tamil, Sinhala, etc.), Gemini 2.5 Flash analyzes the message against the station's active library tracks (`playlist_tracks`).
+  - **Song Found in Library**: The AI RJ crafts an on-air shoutout greeting the listener, confirming the song was found, and dedicating the track. The engine enqueues the RJ announcement at the end of the current song, and automatically promotes the requested music track to play immediately next (`Playlist.moveTrackToPlayNext`).
+  - **Song NOT in Library**: The AI RJ responds with genuine warmth, thanking the listener by name, politely explaining that the song is not in the station library right now, and enthusiastically promising to add it tomorrow.
+- **Multilingual Dedication Prompts**: Dynamic prompt rules in `gemini.py` handle natural language requests in English and regional languages (e.g. Tamil: *"உங்க request '...' பாட்டு நம் station library-ல இருக்கு! உடனே play ஆகுது!"* vs *"இப்போ library-ல இல்ல, ஆனா நாளைக்கு கண்டிப்பா add பண்றேன்!"*).
+- **Library Synchronization**: `StationManager.syncPlaylist()` syncs active music titles and artists to Firestore `stations/{uid}` both on broadcaster login and upon going live.
+- **Seamless Broadcast Flow**: Audio clips and music tracks are synchronized in `ChatOnAirManager.kt` and `Playlist.kt` so listener dedications play out smoothly with zero dead air.
 
 ---
 
