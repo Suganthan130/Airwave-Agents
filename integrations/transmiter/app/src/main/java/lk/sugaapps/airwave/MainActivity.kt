@@ -4,6 +4,7 @@ import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
@@ -25,6 +26,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import com.google.firebase.auth.FirebaseAuth
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import lk.sugaapps.airwave.data.AuthErrors
@@ -131,6 +133,22 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
+                // Sends a Firebase password-reset email. Validation (empty/invalid
+                // address) happens in LoginScreen before this is called.
+                fun forgotPassword(email: String) {
+                    val target = email.trim()
+                    busy = true
+                    FirebaseAuth.getInstance().sendPasswordResetEmail(target)
+                        .addOnSuccessListener {
+                            busy = false
+                            toast("Reset link sent to $target")
+                        }
+                        .addOnFailureListener { t ->
+                            busy = false
+                            toast(AuthErrors.message(t))
+                        }
+                }
+
                 fun googleSignIn() {
                     busy = true
                     scope.launch {
@@ -150,6 +168,10 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
+                // Back from Sign-Up returns to Login instead of leaving the app
+                // (rememberSaveable keeps the typed fields).
+                BackHandler(enabled = screen == AppScreen.SIGN_UP) { screen = AppScreen.LOGIN }
+
                 Box(Modifier.fillMaxSize()) {
                     when (screen) {
                         AppScreen.LOGIN -> AuthHost { padding ->
@@ -157,7 +179,7 @@ class MainActivity : ComponentActivity() {
                                 modifier = padding,
                                 onLogin = ::loginEmail,
                                 onGoogleSignIn = ::googleSignIn,
-                                onForgotPassword = { toast("Password reset is coming soon.") },
+                                onForgotPassword = ::forgotPassword,
                                 onSignUp = { screen = AppScreen.SIGN_UP },
                             )
                         }

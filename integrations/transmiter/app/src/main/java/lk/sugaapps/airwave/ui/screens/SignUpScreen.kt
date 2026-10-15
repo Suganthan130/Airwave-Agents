@@ -40,10 +40,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -56,6 +56,7 @@ import lk.sugaapps.airwave.ui.theme.BorderLight
 import lk.sugaapps.airwave.ui.theme.BorderStrong
 import lk.sugaapps.airwave.ui.theme.BrandBlue
 import lk.sugaapps.airwave.ui.theme.DangerRed
+import lk.sugaapps.airwave.ui.theme.ShadowTint
 import lk.sugaapps.airwave.ui.theme.SurfaceWhite
 import lk.sugaapps.airwave.ui.theme.TextMuted
 import lk.sugaapps.airwave.ui.theme.TextPrimary
@@ -116,7 +117,7 @@ fun SignUpScreen(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .shadow(6.dp, RoundedCornerShape(16.dp), clip = false, ambientColor = Color(0x140F172A), spotColor = Color(0x140F172A))
+                    .shadow(6.dp, RoundedCornerShape(16.dp), clip = false, ambientColor = ShadowTint, spotColor = ShadowTint)
                     .clip(RoundedCornerShape(16.dp))
                     .background(SurfaceWhite)
                     .border(1.dp, BorderLight, RoundedCornerShape(16.dp))
@@ -135,9 +136,10 @@ fun SignUpScreen(
                 Spacer(Modifier.height(6.dp))
                 AppTextField(
                     value = name,
-                    onValueChange = { name = it },
+                    onValueChange = { name = it; error = null },
                     placeholder = stringResource(R.string.signup_name_hint),
                     keyboardType = KeyboardType.Text,
+                    capitalization = KeyboardCapitalization.Words,
                 )
 
                 Spacer(Modifier.height(16.dp))
@@ -146,7 +148,7 @@ fun SignUpScreen(
                 Spacer(Modifier.height(6.dp))
                 AppTextField(
                     value = email,
-                    onValueChange = { email = it },
+                    onValueChange = { email = it; error = null },
                     placeholder = stringResource(R.string.signup_email_hint),
                     keyboardType = KeyboardType.Email,
                 )
@@ -157,7 +159,7 @@ fun SignUpScreen(
                 Spacer(Modifier.height(6.dp))
                 AppTextField(
                     value = password,
-                    onValueChange = { password = it },
+                    onValueChange = { password = it; error = null },
                     placeholder = "",
                     keyboardType = KeyboardType.Password,
                     visualTransformation = if (passwordVisible) {
@@ -176,7 +178,7 @@ fun SignUpScreen(
                 Spacer(Modifier.height(6.dp))
                 AppTextField(
                     value = confirm,
-                    onValueChange = { confirm = it },
+                    onValueChange = { confirm = it; error = null },
                     placeholder = "",
                     keyboardType = KeyboardType.Password,
                     visualTransformation = if (confirmVisible) {
@@ -207,7 +209,7 @@ fun SignUpScreen(
                         error = when {
                             n.isEmpty() -> "Enter your full name."
                             e.isEmpty() -> "Enter your work email."
-                            !e.contains("@") || !e.contains(".") -> "Enter a valid email address."
+                            !android.util.Patterns.EMAIL_ADDRESS.matcher(e).matches() -> "Enter a valid email address."
                             password.length < 6 -> "Password must be at least 6 characters."
                             password != confirm -> "Passwords don't match."
                             else -> null
@@ -220,7 +222,7 @@ fun SignUpScreen(
                     shape = RoundedCornerShape(8.dp),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = BrandBlue,
-                        contentColor = Color.White,
+                        contentColor = SurfaceWhite,
                     ),
                 ) {
                     Text(
@@ -326,6 +328,7 @@ private fun AppTextField(
     keyboardType: KeyboardType,
     visualTransformation: VisualTransformation = VisualTransformation.None,
     trailing: @Composable (() -> Unit)? = null,
+    capitalization: KeyboardCapitalization = KeyboardCapitalization.None,
 ) {
     OutlinedTextField(
         value = value,
@@ -339,7 +342,7 @@ private fun AppTextField(
         },
         trailingIcon = trailing,
         visualTransformation = visualTransformation,
-        keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
+        keyboardOptions = KeyboardOptions(keyboardType = keyboardType, capitalization = capitalization),
         shape = RoundedCornerShape(8.dp),
         colors = OutlinedTextFieldDefaults.colors(
             focusedBorderColor = BrandBlue,

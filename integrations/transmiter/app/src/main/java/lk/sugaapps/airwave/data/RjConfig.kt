@@ -94,4 +94,48 @@ object RjConfig {
             INTERVAL_60_MIN -> "Every 60 min"
             else -> "Off"
         }
+
+    // --- AI Full Takeover (Auto-Pilot) ---
+    private val _isTakeoverEnabledFlow = MutableStateFlow(false)
+    val isTakeoverEnabledFlow: StateFlow<Boolean> = _isTakeoverEnabledFlow.asStateFlow()
+
+    var isTakeoverEnabled: Boolean
+        get() = _isTakeoverEnabledFlow.value
+        set(value) { _isTakeoverEnabledFlow.value = value }
+
+    // News interval in minutes (default 10 min)
+    val NEWS_INTERVAL_OPTIONS = listOf(5, 10, 15, 20, 30)
+    private val _takeoverNewsIntervalFlow = MutableStateFlow(10)
+    val takeoverNewsIntervalFlow: StateFlow<Int> = _takeoverNewsIntervalFlow.asStateFlow()
+
+    var takeoverNewsIntervalMinutes: Int
+        get() = _takeoverNewsIntervalFlow.value
+        set(value) { _takeoverNewsIntervalFlow.value = value }
+
+    // Time check interval in minutes (default 30 min)
+    val TIME_INTERVAL_OPTIONS = listOf(10, 15, 30, 45, 60)
+    private val _takeoverTimeIntervalFlow = MutableStateFlow(30)
+    val takeoverTimeIntervalFlow: StateFlow<Int> = _takeoverTimeIntervalFlow.asStateFlow()
+
+    var takeoverTimeIntervalMinutes: Int
+        get() = _takeoverTimeIntervalFlow.value
+        set(value) { _takeoverTimeIntervalFlow.value = value }
+
+    // Auto-Replay (Continuous playlist repeat): loops playlist from start when it reaches end
+    private val _autoReplayFlow = MutableStateFlow(true)
+    val autoReplayFlow: StateFlow<Boolean> = _autoReplayFlow.asStateFlow()
+
+    var autoReplay: Boolean
+        get() = _autoReplayFlow.value
+        set(value) { _autoReplayFlow.value = value }
+
+    // News Delivery Mode: 0 = Interrupt & auto-resume (Play Now), 1 = Queue into Up Next
+    const val NEWS_MODE_INTERRUPT = 0
+    const val NEWS_MODE_UP_NEXT = 1
+    private val _takeoverNewsModeFlow = MutableStateFlow(NEWS_MODE_INTERRUPT)
+    val takeoverNewsModeFlow: StateFlow<Int> = _takeoverNewsModeFlow.asStateFlow()
+
+    var takeoverNewsMode: Int
+        get() = _takeoverNewsModeFlow.value
+        set(value) { _takeoverNewsModeFlow.value = value }
 }

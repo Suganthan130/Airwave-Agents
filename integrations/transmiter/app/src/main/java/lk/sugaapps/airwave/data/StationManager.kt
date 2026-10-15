@@ -207,4 +207,22 @@ object StationManager {
         }
         db.collection("stations").document(uid).set(data, SetOptions.merge()).await()
     }
+
+    /**
+     * Synchronizes the station's active playlist tracks to Firestore so the web app and
+     * Gemini AI Co-Host backend can fulfill listener song requests in real-time.
+     */
+    suspend fun syncPlaylist(uid: String, tracks: List<Map<String, String>>) {
+        if (uid.isBlank()) return
+        runCatching {
+            db.collection("stations").document(uid).set(
+                mapOf(
+                    "playlist" to tracks,
+                    "updatedAt" to System.currentTimeMillis(),
+                ),
+                SetOptions.merge()
+            ).await()
+        }
+    }
 }
+

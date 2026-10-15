@@ -31,6 +31,11 @@ object SettingsStore {
     private const val KEY_STATION_TITLE = "station_title"
     private const val KEY_PUBLIC_LISTENING_URL = "public_listening_url"
     private const val KEY_INITIALIZED = "has_saved_settings"
+    private const val KEY_TAKEOVER_ENABLED = "takeover_enabled"
+    private const val KEY_TAKEOVER_NEWS_INTERVAL = "takeover_news_interval"
+    private const val KEY_TAKEOVER_TIME_INTERVAL = "takeover_time_interval"
+    private const val KEY_TAKEOVER_AUTO_REPLAY = "takeover_auto_replay"
+    private const val KEY_TAKEOVER_NEWS_MODE = "takeover_news_mode"
 
     data class State(
         val serverType: Int = 0,
@@ -50,6 +55,11 @@ object SettingsStore {
         val autoTimeInterval: Int = 0,
         val stationTitle: String = "",
         val publicListeningUrl: String = "",
+        val takeoverEnabled: Boolean = false,
+        val takeoverNewsInterval: Int = 10,
+        val takeoverTimeInterval: Int = 30,
+        val takeoverAutoReplay: Boolean = true,
+        val takeoverNewsMode: Int = 0,
     )
 
     private fun prefs(context: Context): SharedPreferences =
@@ -95,6 +105,11 @@ object SettingsStore {
             autoTimeInterval = p.getInt(KEY_AUTO_TIME_INTERVAL, RjConfig.autoTimeIntervalIndex),
             stationTitle = p.getString(KEY_STATION_TITLE, "") ?: "",
             publicListeningUrl = p.getString(KEY_PUBLIC_LISTENING_URL, defaultPublicUrl) ?: defaultPublicUrl,
+            takeoverEnabled = p.getBoolean(KEY_TAKEOVER_ENABLED, false),
+            takeoverNewsInterval = p.getInt(KEY_TAKEOVER_NEWS_INTERVAL, 10),
+            takeoverTimeInterval = p.getInt(KEY_TAKEOVER_TIME_INTERVAL, 30),
+            takeoverAutoReplay = p.getBoolean(KEY_TAKEOVER_AUTO_REPLAY, true),
+            takeoverNewsMode = p.getInt(KEY_TAKEOVER_NEWS_MODE, 0),
         )
     }
 
@@ -121,6 +136,11 @@ object SettingsStore {
             putInt(KEY_AUTO_TIME_INTERVAL, state.autoTimeInterval)
             putString(KEY_STATION_TITLE, state.stationTitle)
             putString(KEY_PUBLIC_LISTENING_URL, state.publicListeningUrl)
+            putBoolean(KEY_TAKEOVER_ENABLED, state.takeoverEnabled)
+            putInt(KEY_TAKEOVER_NEWS_INTERVAL, state.takeoverNewsInterval)
+            putInt(KEY_TAKEOVER_TIME_INTERVAL, state.takeoverTimeInterval)
+            putBoolean(KEY_TAKEOVER_AUTO_REPLAY, state.takeoverAutoReplay)
+            putInt(KEY_TAKEOVER_NEWS_MODE, state.takeoverNewsMode)
             apply()
         }
     }
@@ -145,5 +165,10 @@ object SettingsStore {
         RjConfig.voiceIndex = state.rjVoice
         RjConfig.speedIndex = state.rjSpeed
         RjConfig.autoTimeIntervalIndex = state.autoTimeInterval
+        RjConfig.isTakeoverEnabled = state.takeoverEnabled
+        RjConfig.takeoverNewsIntervalMinutes = state.takeoverNewsInterval
+        RjConfig.takeoverTimeIntervalMinutes = state.takeoverTimeInterval
+        RjConfig.autoReplay = state.takeoverAutoReplay
+        RjConfig.takeoverNewsMode = state.takeoverNewsMode
     }
 }

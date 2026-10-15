@@ -38,7 +38,7 @@ object Playlist {
                 a.contains("co-host") ||
                 a.contains("ai rj") ||
                 a.contains("flash news") ||
-                a.contains("hiru news") ||
+                a.contains("news") ||
                 u.contains("rj_news_") ||
                 u.contains("rj_time_") ||
                 u.contains("rj_reply_") ||
@@ -51,6 +51,7 @@ object Playlist {
         val artist: String,
         val durationMs: Long,
         val isAi: Boolean = isAiContent(title, artist, uri.toString()),
+        val isAiMoved: Boolean = false,
     )
 
     val items = mutableStateListOf<Item>()
@@ -58,7 +59,9 @@ object Playlist {
         private set
 
     val current: Item? get() = items.getOrNull(currentIndex)
-    val musicTracks: List<Item> get() = items.filter { !it.isAi }
+    val musicTracks: List<Item> get() = items.filter {
+        !it.isAi && !isAiContent(it.title, it.artist, it.uri.toString())
+    }
     val aiItems: List<Item> get() = items.filter { it.isAi }
     fun hasNext(): Boolean = items.isNotEmpty() && currentIndex < items.size - 1
     fun hasPrev(): Boolean = currentIndex > 0
@@ -242,6 +245,7 @@ object Playlist {
                 obj.put("artist", item.artist)
                 obj.put("durationMs", item.durationMs)
                 obj.put("isAi", false)
+                obj.put("isAiMoved", item.isAiMoved)
                 arr.put(obj)
             }
             root.put("items", arr)
@@ -271,7 +275,8 @@ object Playlist {
                     val isAi = obj.optBoolean("isAi", false) || isAiContent(title, artist, uriStr)
                     // Old shoutouts or AI clips from past sessions must not be restored into the queue
                     if (!isAi) {
-                        loadedItems.add(Item(uri, title, artist, durationMs, false))
+                        val isAiMoved = obj.optBoolean("isAiMoved", false)
+                        loadedItems.add(Item(uri, title, artist, durationMs, false, isAiMoved))
                     }
                 }
             }
@@ -417,4 +422,60 @@ object Playlist {
         currentIndex = if (cur != null) items.indexOf(cur).coerceAtLeast(-1) else -1
         save()
     }
+
+    /**
+     * Finds a matching non-AI music track in the playlist given a song title or query.
+     * Matches by exact title, case-insensitive title, substring, or cleaned name.
+     */
+    fun findTrackByTitleOrQuery(query: String): Item? {
+        if (query.isBlank()) return null
+        val cleanQuery = query.lowercase().trim()
+            .replace(Regex("""^(can you |please |could you )?(play |put |stream )?"""), "")
+            .replace(Regex("""( please| thanks| song| track| paattu| songu)$"""), "")
+            .trim()
+
+
+        // 1. Exact match (case-insensitive)
+        musicTracks.firstOrNull { it.title.trim().equals(cleanQuery, ignoreCase = true) }?.let { return it }
+
+        // 2. Track title contains the query
+        if (cleanQuery.length >= 3) {
+            musicTracks.firstOrNull { it.title.lowercase().contains(cleanQuery) }?.let { return it }
+        }
+
+        // 3. Query contains track title
+        musicTracks.firstOrNull {
+            val t = it.title.lowercase().trim()
+            t.length >= 3 && cleanQuery.contains(t)
+        }?.let { return it }
+
+        // 4. Artist match
+        if (cleanQuery.length >= 3) {
+            musicTracks.firstOrNull { it.artist.lowercase().contains(cleanQuery) }?.let { return it }
+        }
+
+        return null
+    }
+
+    /**
+     * Moves [trackItem] so it plays right after the current track and any pending AI voice shoutouts.
+     */
+    fun moveTrackToPlayNext(trackItem: Item) {
+        val fromIdx = items.indexOfFirst { it.uri == trackItem.uri }
+        if (fromIdx < 0 || fromIdx == currentIndex) return
+        val item = items.removeAt(fromIdx)
+        var cur = currentIndex
+        if (fromIdx < cur) cur -= 1
+
+        // Position right after any pending AI voice shoutouts at the end of current track
+        var targetPos = (cur + 1).coerceIn(0, items.size)
+        while (targetPos < items.size && items[targetPos].isAi) {
+            targetPos++
+        }
+        val movedItem = item.copy(isAiMoved = true)
+        items.add(targetPos, movedItem)
+        currentIndex = cur
+        save()
+    }
 }
+

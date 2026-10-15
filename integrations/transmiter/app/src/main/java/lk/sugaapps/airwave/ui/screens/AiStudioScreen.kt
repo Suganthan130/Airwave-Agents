@@ -3,6 +3,11 @@ package lk.sugaapps.airwave.ui.screens
 import android.content.Context
 import android.media.MediaPlayer
 import android.widget.Toast
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -34,6 +39,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -47,17 +53,22 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import lk.sugaapps.airwave.R
 import lk.sugaapps.airwave.data.FlashNews
-import lk.sugaapps.airwave.data.HiruNewsItem
-import lk.sugaapps.airwave.data.HiruNewsManager
+import lk.sugaapps.airwave.data.NewsItem
+import lk.sugaapps.airwave.data.NewsManager
 import lk.sugaapps.airwave.data.AuthRepository
 import lk.sugaapps.airwave.data.RjConfig
 import lk.sugaapps.airwave.data.StationManager
 import lk.sugaapps.airwave.data.SettingsStore
+import lk.sugaapps.airwave.data.RjScheduler
 import lk.sugaapps.airwave.data.TimeVoiceOver
+import lk.sugaapps.airwave.ui.components.SectionCard
 import lk.sugaapps.airwave.ui.components.SegmentedPills
+import lk.sugaapps.airwave.ui.components.SwitchRow
 import androidx.compose.foundation.border
 import androidx.compose.ui.draw.shadow
 import lk.sugaapps.airwave.engine.Playlist
@@ -74,7 +85,7 @@ import lk.sugaapps.airwave.ui.theme.TextSecondary
 
 /**
  * AI Co-Host & News Studio screen:
- * - Lists real-time Hiru Flash News fetched directly on Android.
+ * - Lists real-time curated news synchronized from Cloud Firestore.
  * - Allows listening / previewing the generated flash news audio.
  * - Broadcast Now with music pause & automatic resume on end.
  * - AI Host voice and speed controls.
@@ -89,10 +100,15 @@ fun AiStudioScreen(
     val scope = rememberCoroutineScope()
     fun toast(msg: String) = Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
 
-    val newsList by HiruNewsManager.newsItems.collectAsState()
-    val isRefreshing by HiruNewsManager.isRefreshing.collectAsState()
+    val newsList by NewsManager.newsItems.collectAsState()
+    val isRefreshing by NewsManager.isRefreshing.collectAsState()
     val currentVoice by RjConfig.voiceIndexFlow.collectAsState()
     val currentSpeed by RjConfig.speedIndexFlow.collectAsState()
+    val isTakeoverEnabled by RjConfig.isTakeoverEnabledFlow.collectAsState()
+    val takeoverNewsInterval by RjConfig.takeoverNewsIntervalFlow.collectAsState()
+    val takeoverTimeInterval by RjConfig.takeoverTimeIntervalFlow.collectAsState()
+    val takeoverAutoReplay by RjConfig.autoReplayFlow.collectAsState()
+    val takeoverNewsMode by RjConfig.takeoverNewsModeFlow.collectAsState()
 
     var generatingId by remember { mutableStateOf<String?>(null) }
     var broadcastingId by remember { mutableStateOf<String?>(null) }
@@ -100,6 +116,8 @@ fun AiStudioScreen(
     var previewPlayer by remember { mutableStateOf<MediaPlayer?>(null) }
     var previewingId by remember { mutableStateOf<String?>(null) }
     var timeChecking by remember { mutableStateOf(false) }
+    var timeCheckProgressSec by remember { mutableIntStateOf(0) }
+    var timeCheckError by remember { mutableStateOf<String?>(null) }
 
     DisposableEffect(Unit) {
         onDispose {
@@ -115,7 +133,7 @@ fun AiStudioScreen(
         previewingId = null
     }
 
-    fun previewNews(item: HiruNewsItem) {
+    fun previewNews(item: NewsItem) {
         if (previewingId == item.id) {
             stopPreview()
             return
@@ -148,18 +166,24 @@ fun AiStudioScreen(
         }
     }
 
-    fun playNewsNow(item: HiruNewsItem) {
+    fun playNewsNow(item: NewsItem) {
         if (broadcastingId != null || generatingId != null) return
         stopPreview()
         broadcastingId = item.id
-        HiruNewsManager.markSeen(context, item.id)
+        NewsManager.markBroadcast(context, item.id)
         onBroadcastNewsNow(item.title, item.description.ifBlank { item.title })
+        // Broadcast is fire-and-forget; clear the busy state after a bounded floor
+        // so the button always recovers (mirrors queueNewsNext's enqueuingId reset).
+        scope.launch {
+            kotlinx.coroutines.delay(4000)
+            if (broadcastingId == item.id) broadcastingId = null
+        }
     }
 
-    fun queueNewsNext(item: HiruNewsItem) {
+    fun queueNewsNext(item: NewsItem) {
         if (enqueuingId != null || generatingId != null) return
         enqueuingId = item.id
-        HiruNewsManager.markSeen(context, item.id)
+        NewsManager.markBroadcast(context, item.id)
         onEnqueueNews(item.title, item.description.ifBlank { item.title })
         scope.launch {
             kotlinx.coroutines.delay(1200)
@@ -173,6 +197,202 @@ fun AiStudioScreen(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
+        // --- 0. AI Full Takeover (Auto-Pilot) Card ---
+        item {
+            CardSurface {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    // Header: Icon + Title + Status Pill
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Row(
+                            modifier = Modifier.weight(1f),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .clip(CircleShape)
+                                    .background(if (isTakeoverEnabled) Color(0xFFDCFCE7) else BrandBlue.copy(alpha = 0.1f)),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_ai),
+                                    contentDescription = null,
+                                    tint = if (isTakeoverEnabled) Color(0xFF15803D) else BrandBlue,
+                                    modifier = Modifier.size(22.dp),
+                                )
+                            }
+                            Spacer(Modifier.width(12.dp))
+                            Column {
+                                Text(
+                                    text = "AI Full Takeover (Auto-Pilot)",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = TextPrimary,
+                                )
+                                Text(
+                                    text = if (isTakeoverEnabled) "Autonomous on-air broadcast active" else "Automate news, time checks & loop",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = if (isTakeoverEnabled) Color(0xFF15803D) else TextSecondary,
+                                    maxLines = 1,
+                                )
+                            }
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(if (isTakeoverEnabled) Color(0xFFDCFCE7) else SurfaceMuted)
+                                .padding(horizontal = 8.dp, vertical = 4.dp),
+                        ) {
+                            Text(
+                                text = if (isTakeoverEnabled) "ACTIVE" else "MANUAL",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (isTakeoverEnabled) Color(0xFF15803D) else TextMuted,
+                                fontWeight = FontWeight.Bold,
+                            )
+                        }
+                    }
+
+                    Spacer(Modifier.height(12.dp))
+
+                    SwitchRow(
+                        title = "Enable AI Full Takeover",
+                        subtitle = "AI autonomously voices news, announces RJ time, and loops playlist",
+                        checked = isTakeoverEnabled,
+                        onCheckedChange = { enabled ->
+                            RjConfig.isTakeoverEnabled = enabled
+                            val current = SettingsStore.load(context)
+                            SettingsStore.save(context, current.copy(takeoverEnabled = enabled))
+                            RjScheduler.resetTakeoverTimers()
+                            if (enabled) {
+                                toast("AI Full Takeover enabled: 24/7 autonomous broadcast")
+                            } else {
+                                toast("AI Full Takeover disabled")
+                            }
+                        }
+                    )
+
+                    AnimatedVisibility(
+                        visible = isTakeoverEnabled,
+                        enter = expandVertically() + fadeIn(),
+                        exit = shrinkVertically() + fadeOut(),
+                    ) {
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            Spacer(Modifier.height(10.dp))
+                            HorizontalDivider(color = BorderLight)
+                            Spacer(Modifier.height(10.dp))
+
+                            // News Bulletin Interval
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    text = "News bulletin interval",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = TextPrimary,
+                                )
+                                Text(
+                                    text = "Every ${takeoverNewsInterval} min",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = BrandBlue,
+                                    fontWeight = FontWeight.Medium,
+                                )
+                            }
+                            Spacer(Modifier.height(6.dp))
+                            IntervalPills(
+                                options = RjConfig.NEWS_INTERVAL_OPTIONS,
+                                selectedMinutes = takeoverNewsInterval,
+                                onSelectMinutes = { mins ->
+                                    RjConfig.takeoverNewsIntervalMinutes = mins
+                                    val current = SettingsStore.load(context)
+                                    SettingsStore.save(context, current.copy(takeoverNewsInterval = mins))
+                                    RjScheduler.resetTakeoverTimers()
+                                    toast("News interval set to $mins min")
+                                }
+                            )
+
+                            Spacer(Modifier.height(12.dp))
+
+                            // Time Check Announcement Interval
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    text = "RJ time check interval",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = TextPrimary,
+                                )
+                                Text(
+                                    text = "Every ${takeoverTimeInterval} min",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = BrandBlue,
+                                    fontWeight = FontWeight.Medium,
+                                )
+                            }
+                            Spacer(Modifier.height(6.dp))
+                            IntervalPills(
+                                options = RjConfig.TIME_INTERVAL_OPTIONS,
+                                selectedMinutes = takeoverTimeInterval,
+                                onSelectMinutes = { mins ->
+                                    RjConfig.takeoverTimeIntervalMinutes = mins
+                                    val current = SettingsStore.load(context)
+                                    SettingsStore.save(context, current.copy(takeoverTimeInterval = mins))
+                                    RjScheduler.resetTakeoverTimers()
+                                    toast("Time check interval set to $mins min")
+                                }
+                            )
+
+                            Spacer(Modifier.height(12.dp))
+
+                            // News Delivery Style
+                            Text(
+                                text = "News delivery style",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = TextPrimary,
+                            )
+                            Spacer(Modifier.height(6.dp))
+                            SegmentedPills(
+                                options = listOf("Play Now (Interrupt)", "Add to Up Next"),
+                                selectedIndex = takeoverNewsMode,
+                            ) { mode ->
+                                RjConfig.takeoverNewsMode = mode
+                                val current = SettingsStore.load(context)
+                                SettingsStore.save(context, current.copy(takeoverNewsMode = mode))
+                            }
+
+                            Spacer(Modifier.height(10.dp))
+                            HorizontalDivider(color = BorderLight)
+                            Spacer(Modifier.height(10.dp))
+
+                            // Auto-Replay Playlist Switch
+                            SwitchRow(
+                                title = "Continuous Playlist Replay",
+                                subtitle = "Auto-repeat playlist from start when it ends (prevents dead air)",
+                                checked = takeoverAutoReplay,
+                                onCheckedChange = { replay ->
+                                    RjConfig.autoReplay = replay
+                                    val current = SettingsStore.load(context)
+                                    SettingsStore.save(context, current.copy(takeoverAutoReplay = replay))
+                                    toast(if (replay) "Playlist auto-replay enabled" else "Auto-replay disabled")
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
         // --- 1. AI Co-Host Status Card ---
         item {
             CardSurface {
@@ -274,12 +494,35 @@ fun AiStudioScreen(
                     OutlinedButton(
                         onClick = {
                             if (!timeChecking) {
+                                val curDurMs = Playlist.current?.durationMs ?: 0L
+                                val balanceSec = Playlist.getSongBalanceTimeMs() / 1000L
+                                val minRequiredSec = TimeVoiceOver.getMinimumRequiredBalanceSec()
+
+                                // Minimum seconds validation against voice creation progress time
+                                if (Playlist.isMusicPlaying && curDurMs > 0 && balanceSec < minRequiredSec) {
+                                    val errorMsg = "Cannot create Time Check: Only ${balanceSec}s left in song. Minimum ${minRequiredSec}s required for AI voice creation."
+                                    timeCheckError = errorMsg
+                                    toast(errorMsg)
+                                    scope.launch {
+                                        delay(5000L)
+                                        if (timeCheckError == errorMsg) timeCheckError = null
+                                    }
+                                    return@OutlinedButton
+                                }
+
                                 timeChecking = true
+                                timeCheckError = null
+                                timeCheckProgressSec = 0
                                 scope.launch {
+                                    val progressJob = launch {
+                                        while (isActive) {
+                                            delay(1000L)
+                                            timeCheckProgressSec++
+                                        }
+                                    }
                                     try {
                                         val targetTimeMs = Playlist.calculateProjectedTimeCheckMs()
                                         val timeLabel = java.text.SimpleDateFormat("h:mm a", java.util.Locale.getDefault()).format(java.util.Date(targetTimeMs))
-                                        val balanceSec = Playlist.getSongBalanceTimeMs() / 1000L
                                         val current = Playlist.current
                                         val next = Playlist.items.getOrNull(Playlist.currentIndex + 1)
                                         val item = TimeVoiceOver.create(
@@ -298,8 +541,11 @@ fun AiStudioScreen(
                                         }
                                         toast(statusMsg)
                                     } catch (e: Exception) {
-                                        toast("Time check failed: ${e.message ?: "Service error"}")
+                                        val failMsg = "Time check failed: ${e.message ?: "Service error"}"
+                                        timeCheckError = failMsg
+                                        toast(failMsg)
                                     } finally {
+                                        progressJob.cancel()
                                         timeChecking = false
                                     }
                                 }
@@ -310,10 +556,10 @@ fun AiStudioScreen(
                             .fillMaxWidth()
                             .height(46.dp),
                         shape = RoundedCornerShape(8.dp),
-                        border = BorderStroke(1.dp, BrandBlue.copy(alpha = 0.5f)),
+                        border = BorderStroke(1.dp, if (timeCheckError != null) DangerRed.copy(alpha = 0.8f) else BrandBlue.copy(alpha = 0.5f)),
                         colors = ButtonDefaults.outlinedButtonColors(
                             containerColor = SurfaceWhite,
-                            contentColor = BrandBlue,
+                            contentColor = if (timeCheckError != null) DangerRed else BrandBlue,
                         ),
                     ) {
                         if (timeChecking) {
@@ -323,9 +569,36 @@ fun AiStudioScreen(
                                 color = BrandBlue,
                             )
                             Spacer(Modifier.width(8.dp))
-                            Text("Generating RJ Time Check…", fontWeight = FontWeight.Medium)
+                            Text("Generating RJ Time Check (${timeCheckProgressSec}s)…", fontWeight = FontWeight.Medium)
                         } else {
-                            Text("🎙️ Announce Time Check (AI RJ)", fontWeight = FontWeight.SemiBold)
+                            Text("Announce Time Check (AI RJ)", fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+
+                    if (timeCheckError != null) {
+                        Spacer(Modifier.height(8.dp))
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(DangerRed.copy(alpha = 0.08f))
+                                .border(1.dp, DangerRed.copy(alpha = 0.25f), RoundedCornerShape(8.dp))
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_warning),
+                                contentDescription = null,
+                                tint = DangerRed,
+                                modifier = Modifier.size(16.dp),
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                text = timeCheckError!!,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = DangerRed,
+                                fontWeight = FontWeight.Medium,
+                            )
                         }
                     }
 
@@ -339,7 +612,7 @@ fun AiStudioScreen(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(
-                            text = "Hiru Watcher: Active (60s check)",
+                            text = "News Feed: Live (Cloud Firestore)",
                             style = MaterialTheme.typography.labelSmall,
                             color = OnAirTeal,
                             fontWeight = FontWeight.Medium,
@@ -354,7 +627,7 @@ fun AiStudioScreen(
             }
         }
 
-        // --- 2. Live Hiru Flash News Header ---
+        // --- 2. Live News Feed Header ---
         item {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -370,7 +643,7 @@ fun AiStudioScreen(
                     )
                     Spacer(Modifier.width(8.dp))
                     Text(
-                        text = "HIRU FLASH NEWS TICKER",
+                        text = "AIRWAVE BREAKING NEWS",
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.Bold,
                         color = TextMuted,
@@ -381,8 +654,12 @@ fun AiStudioScreen(
                 TextButton(
                     onClick = {
                         scope.launch {
-                            HiruNewsManager.refresh(context, notifyNew = false)
-                            toast("Hiru News ticker refreshed")
+                            try {
+                                NewsManager.refresh(context)
+                                toast("News feed refreshed from Cloud Firestore")
+                            } catch (e: Exception) {
+                                toast("Refresh failed: ${e.message ?: "Network error"}")
+                            }
                         }
                     },
                     enabled = !isRefreshing,
@@ -391,7 +668,7 @@ fun AiStudioScreen(
                         CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp, color = BrandBlue)
                         Spacer(Modifier.width(6.dp))
                     }
-                    Text("Refresh Ticker", style = MaterialTheme.typography.labelSmall, color = BrandBlue)
+                    Text("Refresh Feed", style = MaterialTheme.typography.labelSmall, color = BrandBlue)
                 }
             }
         }
@@ -409,15 +686,15 @@ fun AiStudioScreen(
                         if (isRefreshing) {
                             CircularProgressIndicator(modifier = Modifier.size(28.dp), color = BrandBlue)
                             Spacer(Modifier.height(12.dp))
-                            Text("Connecting directly to Hiru News ticker…", color = TextSecondary)
+                            Text("Connecting to Cloud Firestore news feed…", color = TextSecondary)
                         } else {
-                            Text("No flash news loaded yet.", color = TextSecondary)
+                            Text("No news loaded yet.", color = TextSecondary)
                             Spacer(Modifier.height(8.dp))
                             Button(
-                                onClick = { scope.launch { HiruNewsManager.refresh(context) } },
+                                onClick = { scope.launch { NewsManager.refresh(context) } },
                                 colors = ButtonDefaults.buttonColors(containerColor = BrandBlue),
                             ) {
-                                Text("Fetch Hiru Flash News")
+                                Text("Fetch News Feed")
                             }
                         }
                     }
@@ -446,7 +723,7 @@ fun AiStudioScreen(
 
 @Composable
 private fun NewsItemCard(
-    item: HiruNewsItem,
+    item: NewsItem,
     isGenerating: Boolean,
     isPreviewing: Boolean,
     isBroadcasting: Boolean,
@@ -471,15 +748,31 @@ private fun NewsItemCard(
                                     .background(DangerRed)
                                     .padding(horizontal = 6.dp, vertical = 2.dp)
                             ) {
-                                Text("🚨 NEW", color = Color.White, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                                Text("NEW", color = Color.White, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
                             }
                             Spacer(Modifier.width(8.dp))
                         }
-                        Text(
-                            text = "Hiru #${item.id}",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = TextMuted,
-                        )
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(BrandBlue.copy(alpha = 0.1f))
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = item.category.uppercase(),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = BrandBlue,
+                                fontWeight = FontWeight.Bold,
+                            )
+                        }
+                        if (item.published.isNotBlank()) {
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                text = item.published,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = TextMuted,
+                            )
+                        }
                     }
                     Spacer(Modifier.height(4.dp))
                     Text(
@@ -529,7 +822,7 @@ private fun NewsItemCard(
                         CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp, color = BrandBlue)
                     } else {
                         Text(
-                            text = if (isPreviewing) "⏹ Stop" else "🎧 Listen",
+                            text = if (isPreviewing) "Stop" else "Listen",
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.SemiBold,
                             maxLines = 1,
@@ -571,7 +864,7 @@ private fun NewsItemCard(
                         Spacer(Modifier.width(6.dp))
                         Text("Voicing…", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, maxLines = 1)
                     } else {
-                        Text("▶ Play Now", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, maxLines = 1)
+                        Text("Play Now", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, maxLines = 1)
                     }
                 }
             }
@@ -581,15 +874,44 @@ private fun NewsItemCard(
 
 @Composable
 private fun CardSurface(content: @Composable () -> Unit) {
-    val shape = RoundedCornerShape(16.dp)
-    Column(
+    // Delegates to the shared SectionCard so card styling lives in one place.
+    SectionCard { content() }
+}
+
+@Composable
+private fun IntervalPills(
+    options: List<Int>,
+    selectedMinutes: Int,
+    onSelectMinutes: (Int) -> Unit,
+) {
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .shadow(3.dp, shape, clip = false, ambientColor = Color(0x120F172A), spotColor = Color(0x120F172A))
-            .clip(shape)
-            .background(SurfaceWhite)
-            .border(1.dp, BorderLight, shape)
-            .padding(16.dp),
-    ) { content() }
+            .clip(RoundedCornerShape(8.dp))
+            .background(SurfaceMuted)
+            .padding(3.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        options.forEach { minutes ->
+            val selected = minutes == selectedMinutes
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(if (selected) BrandBlue else Color.Transparent)
+                    .clickable { onSelectMinutes(minutes) }
+                    .padding(vertical = 8.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = "${minutes}m",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                    color = if (selected) Color.White else TextSecondary,
+                    maxLines = 1,
+                )
+            }
+        }
+    }
 }
 

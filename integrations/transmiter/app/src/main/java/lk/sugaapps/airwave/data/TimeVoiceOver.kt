@@ -20,6 +20,29 @@ import lk.sugaapps.airwave.engine.Playlist
  */
 object TimeVoiceOver {
 
+    /**
+     * Estimated / measured progress time needed to generate an AI voice time check (in ms).
+     * Defaults to 10 seconds. Dynamically updated after each generation.
+     */
+    var lastVoiceCreationTimeMs: Long = 10_000L
+        private set
+
+    /**
+     * Returns the minimum safe balance duration (in seconds) required in the active song
+     * before allowing a Time Check to be scheduled.
+     * Incorporates measured voice creation progress time + safety margin.
+     */
+    fun getMinimumRequiredBalanceSec(): Long {
+        val measuredSec = (lastVoiceCreationTimeMs + 2_000L) / 1000L
+        return measuredSec.coerceIn(10L, 25L)
+    }
+
+    fun recordVoiceCreationTime(durationMs: Long) {
+        if (durationMs in 3_000L..60_000L) {
+            lastVoiceCreationTimeMs = durationMs
+        }
+    }
+
     suspend fun create(
         context: Context,
         nowTrack: String = "",
@@ -28,10 +51,12 @@ object TimeVoiceOver {
         nextArtist: String = "",
         targetTimeMs: Long = Playlist.calculateProjectedTimeCheckMs(),
     ): Playlist.Item = withContext(NonCancellable + Dispatchers.IO) {
-        val timeLabel = SimpleDateFormat("h:mm a", Locale.getDefault()).format(Date(targetTimeMs))
-        val voice = RjConfig.voiceCode
-        val balanceSec = Playlist.getSongBalanceTimeMs() / 1000L
-        val relayDelaySec = 20L
+        val startTime = System.currentTimeMillis()
+        try {
+            val timeLabel = SimpleDateFormat("h:mm a", Locale.getDefault()).format(Date(targetTimeMs))
+            val voice = RjConfig.voiceCode
+            val balanceSec = Playlist.getSongBalanceTimeMs() / 1000L
+            val relayDelaySec = 20L
 
         val payload = mapOf(
             "type" to "time",
@@ -83,5 +108,9 @@ object TimeVoiceOver {
 
         val subtitle = spokenText.ifBlank { "Airwave Agents · $timeLabel" }
         Playlist.Item(uri, "RJ Time Check · $timeLabel", subtitle, durationMs)
+    } finally {
+        val durationMs = System.currentTimeMillis() - startTime
+        recordVoiceCreationTime(durationMs)
     }
+}
 }

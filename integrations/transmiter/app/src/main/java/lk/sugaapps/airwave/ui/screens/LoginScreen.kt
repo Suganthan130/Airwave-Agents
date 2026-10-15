@@ -39,7 +39,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -54,6 +53,7 @@ import lk.sugaapps.airwave.ui.theme.BorderLight
 import lk.sugaapps.airwave.ui.theme.BorderStrong
 import lk.sugaapps.airwave.ui.theme.BrandBlue
 import lk.sugaapps.airwave.ui.theme.DangerRed
+import lk.sugaapps.airwave.ui.theme.ShadowTint
 import lk.sugaapps.airwave.ui.theme.SurfaceWhite
 import lk.sugaapps.airwave.ui.theme.TextMuted
 import lk.sugaapps.airwave.ui.theme.TextPrimary
@@ -70,7 +70,7 @@ fun LoginScreen(
     modifier: Modifier = Modifier,
     onLogin: (email: String, password: String) -> Unit = { _, _ -> },
     onGoogleSignIn: () -> Unit = {},
-    onForgotPassword: () -> Unit = {},
+    onForgotPassword: (email: String) -> Unit = {},
     onSignUp: () -> Unit = {},
 ) {
     var email by rememberSaveable { mutableStateOf("") }
@@ -112,7 +112,7 @@ fun LoginScreen(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .shadow(6.dp, RoundedCornerShape(16.dp), clip = false, ambientColor = Color(0x140F172A), spotColor = Color(0x140F172A))
+                    .shadow(6.dp, RoundedCornerShape(16.dp), clip = false, ambientColor = ShadowTint, spotColor = ShadowTint)
                     .clip(RoundedCornerShape(16.dp))
                     .background(SurfaceWhite)
                     .border(1.dp, BorderLight, RoundedCornerShape(16.dp))
@@ -131,7 +131,7 @@ fun LoginScreen(
                 Spacer(Modifier.height(6.dp))
                 AppTextField(
                     value = email,
-                    onValueChange = { email = it },
+                    onValueChange = { email = it; error = null },
                     placeholder = stringResource(R.string.login_email_hint),
                     keyboardType = KeyboardType.Email,
                 )
@@ -145,7 +145,15 @@ fun LoginScreen(
                 ) {
                     FieldLabel(stringResource(R.string.login_password_label))
                     TextButton(
-                        onClick = onForgotPassword,
+                        onClick = {
+                            val e = email.trim()
+                            if (e.isEmpty() || !android.util.Patterns.EMAIL_ADDRESS.matcher(e).matches()) {
+                                error = "Enter your email above to reset your password."
+                            } else {
+                                error = null
+                                onForgotPassword(e)
+                            }
+                        },
                         contentPadding = PaddingValues(0.dp),
                     ) {
                         Text(
@@ -159,7 +167,7 @@ fun LoginScreen(
                 Spacer(Modifier.height(6.dp))
                 AppTextField(
                     value = password,
-                    onValueChange = { password = it },
+                    onValueChange = { password = it; error = null },
                     placeholder = "",
                     keyboardType = KeyboardType.Password,
                     visualTransformation = if (passwordVisible) {
@@ -199,7 +207,7 @@ fun LoginScreen(
                         val e = email.trim()
                         error = when {
                             e.isEmpty() -> "Enter your work email."
-                            !e.contains("@") || !e.contains(".") -> "Enter a valid email address."
+                            !android.util.Patterns.EMAIL_ADDRESS.matcher(e).matches() -> "Enter a valid email address."
                             password.isEmpty() -> "Enter your password."
                             else -> null
                         }
@@ -211,7 +219,7 @@ fun LoginScreen(
                     shape = RoundedCornerShape(8.dp),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = BrandBlue,
-                        contentColor = Color.White,
+                        contentColor = SurfaceWhite,
                     ),
                 ) {
                     Text(

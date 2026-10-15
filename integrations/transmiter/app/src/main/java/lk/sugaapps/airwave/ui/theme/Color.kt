@@ -22,3 +22,8 @@ val TextMuted = Color(0xFF94A3B8)
 val OnAirTeal = Color(0xFF0D9488)        // live / on-air accent (used sparingly)
 val SuccessGreen = Color(0xFF16A34A)
 val DangerRed = Color(0xFFDC2626)
+val WarnAmber = Color(0xFFF59E0B)        // buffering / warning
+val InfoIndigo = Color(0xFF6366F1)       // informational / secondary status
+
+// Soft card shadow tint (replaces ad-hoc Color(0x14/0x12 0F172A) literals)
+val ShadowTint = Color(0x120F172A)

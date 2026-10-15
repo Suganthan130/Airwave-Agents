@@ -39,6 +39,9 @@ data class StationChatMessage(
     val isQueuedOnAir: Boolean = false,
     val isPlayingOnAir: Boolean = false,
     val isPlayedOnAir: Boolean = false,
+    val isSongRequest: Boolean = false,
+    val songFound: Boolean = false,
+    val requestedSongTitle: String = "",
 )
 
 /**
@@ -141,6 +144,9 @@ object ChatOnAirManager {
                     val status = doc.getString("status") ?: "queued"
                     val replyText = doc.getString("replyText") ?: ""
                     val replyAudioBase64 = doc.getString("replyAudioBase64") ?: ""
+                    val isSongReq = doc.getBoolean("isSongRequest") ?: false
+                    val songFound = doc.getBoolean("songFound") ?: false
+                    val reqSongTitle = doc.getString("requestedSongTitle") ?: ""
                     val createdAt = runCatching { doc.getTimestamp("createdAt")?.toDate()?.time }.getOrNull()
                         ?: runCatching { doc.getLong("createdAt") }.getOrNull()
                         ?: runCatching { doc.getDouble("createdAt")?.toLong() }.getOrNull()
@@ -166,6 +172,9 @@ object ChatOnAirManager {
                         isQueuedOnAir = isQueued,
                         isPlayingOnAir = isPlaying,
                         isPlayedOnAir = isPlayed,
+                        isSongRequest = isSongReq,
+                        songFound = songFound,
+                        requestedSongTitle = reqSongTitle,
                     )
                     list.add(msg)
 
@@ -232,7 +241,18 @@ object ChatOnAirManager {
             }.getOrDefault(0L)
 
             val countryTag = if (msg.userCountry.isNotBlank() && msg.userCountry != "Global") " (${msg.userCountry})" else ""
-            val title = "💬 RJ Shoutout: ${msg.userName}$countryTag"
+            val isRequest = msg.isSongRequest || detectSongRequest(msg.text)
+            val matchedTrack = if (msg.songFound && msg.requestedSongTitle.isNotBlank()) {
+                Playlist.findTrackByTitleOrQuery(msg.requestedSongTitle)
+            } else if (isRequest) {
+                Playlist.findTrackByTitleOrQuery(msg.text)
+            } else null
+
+            val title = if (matchedTrack != null) {
+                "🎵 Song Request: ${msg.userName}$countryTag"
+            } else {
+                "💬 RJ Shoutout: ${msg.userName}$countryTag"
+            }
             val artist = msg.replyText.ifBlank { "Listener On-Air Reply" }
 
             val item = Playlist.Item(
@@ -242,16 +262,33 @@ object ChatOnAirManager {
                 durationMs = durationMs,
             )
 
-            // Enqueue right after the currently playing song in Playlist queue
+            // 1. Enqueue shoutout right after the currently playing song in Playlist queue
             Playlist.enqueueAtEndOfCurrentSong(item)
             queuedMessageIds.add(msg.id)
             savePrefs(context)
 
-            Log.i(TAG, "Enqueued listener shoutout on-air at end of song: $title")
-            _onAirNotificationFlow.tryEmit("💬 New chat from ${msg.userName}$countryTag queued for end of song!")
+            // 2. If the song is in our playlist: move it to play immediately after this on-air shoutout!
+            if (matchedTrack != null) {
+                Playlist.moveTrackToPlayNext(matchedTrack)
+                Log.i(TAG, "Song request: Moved '${matchedTrack.title}' to play next for ${msg.userName}")
+                _onAirNotificationFlow.tryEmit("🎵 Song Request: '${matchedTrack.title}' moved to Up Next for ${msg.userName}!")
+            } else if (isRequest) {
+                Log.i(TAG, "Song request: '${msg.requestedSongTitle.ifBlank { msg.text }}' not in playlist — RJ promised to add tomorrow")
+                _onAirNotificationFlow.tryEmit("💬 Song requested by ${msg.userName} not in library — RJ promised to add tomorrow!")
+            } else {
+                Log.i(TAG, "Enqueued listener shoutout on-air at end of song: $title")
+                _onAirNotificationFlow.tryEmit("💬 New chat from ${msg.userName}$countryTag queued for end of song!")
+            }
         }.onFailure { e ->
             Log.w(TAG, "Failed to enqueue chat reply for ${msg.id}: ${e.message}")
         }
+    }
+
+    private fun detectSongRequest(text: String): Boolean {
+        val lower = text.lowercase().trim()
+        return lower.contains("play ") || lower.contains("song") || lower.contains("track") ||
+            lower.contains("paattu") || lower.contains("request") || lower.contains("podunga") ||
+            lower.contains("pannunga") || lower.contains("hear") || lower.contains("listen to")
     }
 
     /**
@@ -261,6 +298,9 @@ object ChatOnAirManager {
         (coroutineScope ?: CoroutineScope(Dispatchers.IO)).launch(Dispatchers.IO) {
             runCatching {
                 val cur = Playlist.current
+                val songTitles = Playlist.musicTracks.map {
+                    mapOf("title" to it.title, "artist" to it.artist)
+                }
                 AgentApiClient.post(
                     "process-message",
                     mapOf(
@@ -269,6 +309,7 @@ object ChatOnAirManager {
                         "nowArtist" to (cur?.artist ?: ""),
                         "voice" to RjConfig.voiceCode,
                         "speakingRate" to RjConfig.speakingRate,
+                        "playlist" to songTitles,
                     )
                 )
             }
@@ -328,9 +369,19 @@ object ChatOnAirManager {
                 }.getOrDefault(0L)
 
                 val countryTag = if (msg.userCountry.isNotBlank() && msg.userCountry != "Global") " (${msg.userCountry})" else ""
+                val isRequest = msg.isSongRequest || detectSongRequest(msg.text)
+                val matched = if (isRequest) {
+                    Playlist.findTrackByTitleOrQuery(msg.requestedSongTitle.ifBlank { msg.text })
+                } else null
+
+                val title = if (matched != null) {
+                    "🎵 Song Request: ${msg.userName}$countryTag"
+                } else {
+                    "💬 RJ Shoutout: ${msg.userName}$countryTag"
+                }
                 val item = Playlist.Item(
                     uri = uri,
-                    title = "💬 RJ Shoutout: ${msg.userName}$countryTag",
+                    title = title,
                     artist = msg.replyText,
                     durationMs = durationMs,
                 )
@@ -343,13 +394,25 @@ object ChatOnAirManager {
 
                 val targetIdx = (Playlist.currentIndex + 1).coerceAtLeast(0)
                 Playlist.insert(targetIdx, item)
+                if (matched != null) {
+                    // Move the requested track right after the shoutout
+                    val fromIdx = Playlist.items.indexOfFirst { it.uri == matched.uri }
+                    if (fromIdx >= 0) {
+                        Playlist.move(fromIdx, (targetIdx + 1).coerceIn(0, Playlist.items.size - 1))
+                    }
+                }
                 Playlist.play(targetIdx, engine, context)
 
                 queuedMessageIds.remove(msg.id)
                 playedMessageIds.add(msg.id)
                 savePrefs(context)
 
-                _onAirNotificationFlow.tryEmit("🎙️ Broadcasting shoutout for ${msg.userName} now!")
+                val notificationMsg = if (matched != null) {
+                    "🎵 Broadcasting song request shoutout for ${msg.userName}! '${matched.title}' plays next!"
+                } else {
+                    "🎙️ Broadcasting shoutout for ${msg.userName} now!"
+                }
+                _onAirNotificationFlow.tryEmit(notificationMsg)
             }
         }
     }
