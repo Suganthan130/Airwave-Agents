@@ -26,7 +26,7 @@ streaming stack.
 - `apps/web/` — listener web app; static assets under `public/`.
 - `apps/android/transmiter/` — Android transmitter app (public).
 - `apps/android/core-app/` — **private git submodule** (`BroadcastMySelf-Radio-Tool`). See below.
-- `infra/` — `firebase/` and `gcp/` config. `scripts/` — ops/dev scripts. `docs/` — documentation.
+- `docs/` — documentation.
 
 When adding to the LLM/Gemini layer, default to the latest Claude/Gemini models and keep
 provider calls in `services/agent-api/`, not in clients.

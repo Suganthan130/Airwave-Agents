@@ -41,17 +41,10 @@ airwave-agents/
 │       │   └── models/
 │       └── tests/
 ├── apps/
-│   └── web/
-│       └── public/
-│           ├── css/
-│           └── js/
-├── integrations/
-│   ├── transmiter/        # Android transmitter app (public)
-│   └── core-app/          # private submodule → BroadcastMySelf-Radio-Tool
-├── infra/
-│   ├── firebase/
-│   └── gcp/
-├── scripts/
+│   ├── web/                   # listener web app
+│   └── android/
+│       ├── transmiter/        # Android transmitter app (public)
+│       └── core-app/          # private submodule → BroadcastMySelf-Radio-Tool
 ├── docs/
 │   ├── architecture/
 │   ├── api/
