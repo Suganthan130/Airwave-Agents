@@ -43,6 +43,23 @@ provider calls in `services/agent-api/`, not in clients.
   from the web or Android clients.
 - See `RULES.md` for workflow and `SECURITY.md` for disclosure.
 
+## Handle every state — no exceptions
+
+Any function or feature that does real work (especially async: auth, network, Firestore, file/audio
+I/O, streaming) **must handle all of these before it's considered done**:
+
+- **Loading:** show a loading indicator and block/disable the triggering control while work is in
+  flight. Never let a user fire the same action twice or wonder if anything happened.
+- **Success:** handle it explicitly (navigate, confirm, update state).
+- **Error:** catch every failure and show a **clear, user-friendly message** mapped from the cause
+  (e.g. wrong password, email already in use, no network, provider not configured). Never surface a
+  raw stack trace, a cryptic code, or a silent failure.
+- **Edge cases:** empty/invalid input (validate before calling out), no network, user cancellation
+  (treat as benign, not an error), operation already in progress, and missing config.
+
+"It compiles" or "the happy path works" is **not** done. If you add a function, you own all four
+states. Reuse the shared helpers (e.g. `AuthErrors`, loading overlays) rather than re-inventing them.
+
 ---
 
 ## 1. Think Before Coding

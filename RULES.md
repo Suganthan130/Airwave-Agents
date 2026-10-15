@@ -16,6 +16,17 @@ Conventions for working in the Airwave Agents repository.
 - Infrastructure config lives in `infra/`.
 - The private Android app source is kept out of this repository.
 
+## Robustness — handle every state
+
+Every function or feature that does real work (async especially) must handle **all** of:
+
+- **Loading** — show an indicator and block the trigger while it runs.
+- **Success** — handle explicitly.
+- **Error** — catch everything; show a clear, user-friendly message (never a raw error or silent fail).
+- **Edge cases** — invalid/empty input, no network, cancellation, already-in-progress, missing config.
+
+The happy path alone is not "done". See `CLAUDE.md` → "Handle every state" for the full rule.
+
 ## Workflow
 
 - Branch from `main`; open a pull request for every change.

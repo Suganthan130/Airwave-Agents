@@ -28,6 +28,12 @@ venv/
 node_modules/
 dist/
 build/
+.firebase/
+*.tsbuildinfo
+
+# === Media / audio assets (large binaries — kept local, not published) ===
+tracks/
+integrations/transmiter/app/src/main/assets/tracks/
 
 # === Logs ===
 logs/
@@ -37,3 +43,15 @@ logs/
 .DS_Store
 .idea/
 .vscode/
+
+# === Private UI (reproductions of the existing app) — kept local, not published ===
+integrations/transmiter/app/src/main/java/lk/sugaapps/airwave/ui/screens/HomeScreen.kt
+integrations/transmiter/app/src/main/java/lk/sugaapps/airwave/ui/screens/MixerScreen.kt
+integrations/transmiter/app/src/main/java/lk/sugaapps/airwave/ui/screens/EqualizerScreen.kt
+integrations/transmiter/app/src/main/java/lk/sugaapps/airwave/ui/screens/LibraryScreen.kt
+integrations/transmiter/app/src/main/java/lk/sugaapps/airwave/ui/screens/SettingsScreen.kt
+integrations/transmiter/app/src/main/java/lk/sugaapps/airwave/PrivateExperience.kt
+
+# === Private native broadcast engine (proprietary C++ + JNI) — kept local, not published ===
+integrations/transmiter/app/src/main/cpp/
+integrations/transmiter/app/src/main/java/lk/sugastreamapps/
