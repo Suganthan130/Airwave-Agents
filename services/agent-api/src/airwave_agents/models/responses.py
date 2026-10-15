@@ -33,3 +33,6 @@ class ProcessMessageResponse(BaseModel):
     replyText: Optional[str] = None
     replyAudioBase64: Optional[str] = None
     languageCode: Optional[str] = None
+    isSongRequest: Optional[bool] = False
+    songFound: Optional[bool] = False
+    requestedSongTitle: Optional[str] = None

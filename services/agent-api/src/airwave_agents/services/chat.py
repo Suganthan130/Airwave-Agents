@@ -20,6 +20,7 @@ async def process_one_message(
     voice: str | None = None,
     speaking_rate: float | None = None,
     ai_persona: str | None = None,
+    playlist: list[dict] | None = None,
 ) -> dict:
     """Processes a single queued listener chat message document in Firestore with retry resilience,
     applying broadcaster voice personality, speech speed, and custom AI persona.
@@ -122,11 +123,14 @@ async def process_one_message(
         # 3. Resolve Custom AI Persona / Tone
         effective_persona = ai_persona or station_data.get("aiPersona") or station_data.get("stationTone", "")
 
+        # 4. Resolve Station Playlist Tracks
+        effective_playlist = playlist or station_data.get("playlist") or []
+
         logger.info(
-            f"Processing chat {message_id}: station={station_id}, voice={effective_voice}, rate={effective_rate}, persona={effective_persona or 'default'}"
+            f"Processing chat {message_id}: station={station_id}, voice={effective_voice}, rate={effective_rate}, persona={effective_persona or 'default'}, playlist_tracks={len(effective_playlist)}"
         )
 
-        # Generate personalized multilingual RJ reply with 18+ filter
+        # Generate personalized multilingual RJ reply with 18+ filter and song request fulfillment
         result = await generate_rj_chat_reply(
             user_name=current.get("userName", "Listener"),
             user_country=current.get("userCountry", "Global"),
@@ -137,6 +141,7 @@ async def process_one_message(
             next_artist=next_artist or current.get("nextArtist", ""),
             voice_style=effective_voice,
             ai_persona=effective_persona,
+            playlist_tracks=effective_playlist,
         )
 
         if result.get("skipped"):
@@ -176,6 +181,9 @@ async def process_one_message(
             "replySpeakingRate": effective_rate,
             "replyAudioBase64": audio_base64,
             "replyCreatedAt": firestore.SERVER_TIMESTAMP,
+            "isSongRequest": result.get("isSongRequest", False),
+            "songFound": result.get("songFound", False),
+            "requestedSongTitle": result.get("requestedSongTitle", ""),
         })
 
         return {
@@ -186,6 +194,9 @@ async def process_one_message(
             "languageCode": voice_config["lang"],
             "voice": voice_config["voice"],
             "speakingRate": effective_rate,
+            "isSongRequest": result.get("isSongRequest", False),
+            "songFound": result.get("songFound", False),
+            "requestedSongTitle": result.get("requestedSongTitle", ""),
         }
     except Exception as e:
         logger.error(f"Error processing message {message_id}: {e}", exc_info=True)

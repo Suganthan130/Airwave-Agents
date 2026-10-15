@@ -166,10 +166,10 @@ async def process_message(req: ProcessMessageRequest):
             voice=req.voice,
             speaking_rate=req.speakingRate,
             ai_persona=req.aiPersona,
+            playlist=req.playlist,
         )
         if "error" in result:
             raise HTTPException(status_code=400, detail=result["error"])
-
 
         return ProcessMessageResponse(
             messageId=req.messageId,
@@ -177,6 +177,9 @@ async def process_message(req: ProcessMessageRequest):
             replyText=result.get("replyText"),
             replyAudioBase64=result.get("replyAudioBase64"),
             languageCode=result.get("languageCode"),
+            isSongRequest=result.get("isSongRequest", False),
+            songFound=result.get("songFound", False),
+            requestedSongTitle=result.get("requestedSongTitle", ""),
         )
     except HTTPException:
         raise

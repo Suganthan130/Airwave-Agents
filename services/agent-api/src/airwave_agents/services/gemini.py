@@ -123,12 +123,24 @@ async def generate_rj_chat_reply(
     next_artist: str = "",
     voice_style: str = "male",
     ai_persona: str = "",
+    playlist_tracks: list[dict] | None = None,
 ) -> dict:
-    """Multilingual listener chat analysis, 18+ filter, and personalized RJ reply tailored to broadcaster AI persona."""
+    """Multilingual listener chat analysis, 18+ filter, song request fulfillment, and personalized RJ reply tailored to broadcaster AI persona."""
     _ensure_vertex()
 
     now_info = f'- Currently Playing Song: "{now_track}" by {now_artist}\n' if now_track else ""
     next_info = f'- Next Song in Queue: "{next_track}" by {next_artist}\n' if next_track else ""
+
+    playlist_info = ""
+    if playlist_tracks:
+        track_lines = []
+        for t in playlist_tracks:
+            title = str(t.get("title", "")).strip()
+            artist = str(t.get("artist", "")).strip()
+            if title:
+                track_lines.append(f'"{title}" by {artist}' if artist else f'"{title}"')
+        if track_lines:
+            playlist_info = "\nOUR STATION PLAYLIST TRACKS IN LIBRARY (AVAILABLE TO PLAY):\n- " + "\n- ".join(track_lines[:50]) + "\n"
 
     norm_style = str(voice_style or "female").lower().strip()
     if norm_style in ("1", "female", "fem", "woman", "chirp", "chirp-hd", "en-us-chirp-hd-f"):
@@ -160,29 +172,49 @@ async def generate_rj_chat_reply(
         f"- Listener Name: {user_name or 'Listener'}\n"
         f"- Country: {user_country or 'Global'}\n"
         f'- Listener Message: "{message_text}"\n'
-        f"{now_info}{next_info}\n"
+        f"{now_info}{next_info}{playlist_info}\n"
 
-        f"CRITICAL BROADCAST & LANGUAGE RULES:\n"
+        f"CRITICAL BROADCAST & SONG REQUEST RULES:\n"
         f"1. 18+ & INAPPROPRIATE FILTER: If the message asks an unusually inappropriate, sexually explicit, 18+, adult, crude, abusive, offensive, or harmful query, output \"SKIP\".\n"
         f"2. PRIMARY LANGUAGES SUPPORTED (TAMIL & ENGLISH):\n"
         f"   - If Tamil script OR romanized Tamil (Tanglish) or Tamil request -> reply in authentic, natural, charismatic spoken TAMIL (using Tamil script for flawless TTS speech fluency, with languageCode 'ta-IN' and languageName 'Tamil')!\n"
         f"   - For all other messages/requests -> reply in charismatic, engaging ENGLISH (with languageCode 'en-US' and languageName 'English')!\n"
-        f"3. DELIVER CREATIVE REQUESTS IMMEDIATELY ON-AIR (NEVER POSTPONE TO 'NEXT TIME'):\n"
+        f"3. SONG REQUEST HANDLING & DYNAMIC ON-AIR DEDICATION:\n"
+        f"   - Check if the listener is asking or requesting to play a specific song or music track (e.g., 'can you play ...', 'please play ...', 'play ...', 'song request: ...', 'I want to hear ...', 'paattu podunga ...', 'play pannunga ...', etc.).\n"
+        f"   - IF IT IS A SONG REQUEST AND THE SONG IS IN OUR PLAYLIST (match song title or artist in OUR STATION PLAYLIST TRACKS above):\n"
+        f"     * Set: \"isSongRequest\": true, \"songFound\": true, \"requestedSongTitle\": \"<Exact Song Title from Station Playlist>\"\n"
+        f"     * In \"replyText\": Give an upbeat, charismatic on-air shoutout greeting the listener, confirming you found their requested song, and proudly announcing that it is queued and playing right next for them!\n"
+        f"     * Example (English): \"Hey {user_name or 'there'} from {user_country or 'our listeners'}! Awesome choice! You got it, '[Exact Title]' is lined up and playing right next for you on Airwave Radio!\"\n"
+        f"     * Example (Tamil): \"வணக்கம் {user_name or 'நண்பரே'}! அருமையான பாடல் தேர்வு! நீங்க கேட்ட '[Exact Title]' பாடல் அடுத்ததாக உங்களுக்காக நம்ம Airwave Radio-வில் ஒலிக்கப்போகிறது!\"\n"
+        f"   - IF IT IS A SONG REQUEST BUT THE SONG IS NOT IN OUR PLAYLIST:\n"
+        f"     * Set: \"isSongRequest\": true, \"songFound\": false, \"requestedSongTitle\": \"<Extracted Song Title>\"\n"
+        f"     * In \"replyText\": Reply with genuine broadcast warmth, politeness, and gratitude:\n"
+        f"       1) Thank the listener warmly for tuning in and sending in their request.\n"
+        f"       2) Politely explain that we unfortunately don't have that song in our playlist right now.\n"
+        f"       3) Promise enthusiastically that you will add the requested song to the playlist tomorrow!\n"
+        f"       4) Thank them again for tuning in and supporting the station!\n"
+        f"     * Example (English): \"Thanks so much for the song request, {user_name or 'friend'}! Unfortunately, we don't have '[Song Title]' in our playlist today, but I will definitely add it tomorrow! Thank you so much for tuning in and keeping the vibe alive!\"\n"
+        f"     * Example (Tamil): \"ரொம்ப நன்றி {user_name or 'நண்பரே'}! மன்னிக்கவும், இப்போதைக்கு நம்ம playlist-ல '[Song Title]' பாடல் இல்லை, ஆனா கண்டிப்பா நாளைக்கு இந்த பாட்டை நான் add பண்றேன்! தொடர்ந்து இணைந்திருங்கள், கேட்டதற்கு மிக்க நன்றி!\"\n"
+        f"   - IF IT IS NOT A SONG REQUEST:\n"
+        f"     * Set: \"isSongRequest\": false, \"songFound\": false, \"requestedSongTitle\": \"\"\n"
+        f"4. DELIVER CREATIVE REQUESTS IMMEDIATELY ON-AIR (NEVER POSTPONE TO 'NEXT TIME'):\n"
         f"   - If the listener asks for a poem (kavithai / கவிதை / shayari / poem), a short story (கதை / kahani / story), a joke, a riddle, a proverb, thoughts on rain/love/friendship/life, or ANY creative request:\n"
         f"     * RECITE OR TELL IT RIGHT NOW in this on-air reply!\n"
-        f"     * NEVER say 'I will say it next time', 'adutha murai solren', 'next break la solren', 'next time I will tell you', 'stay tuned later', or postpone their request.\n"
         f"     * Compose a beautiful, heartwarming, rhyming poem or short story right here on the spot and deliver it on-air with soulful, charismatic energy!\n"
-        f"4. ANSWER WHAT THE LISTENER SPECIFICALLY ASKED — NEVER GIVE A GENERIC TEMPLATE:\n"
+        f"5. ANSWER WHAT THE LISTENER SPECIFICALLY ASKED — NEVER GIVE A GENERIC TEMPLATE:\n"
         f"   - Directly and specifically answer the exact question or comment the listener asked.\n"
         f"   - Greet them warmly by name and country, then deliver the answer / poem / story immediately.\n"
         f"   - 2 to 4 natural, conversational, punchy radio sentences.\n"
         f"   - Plain spoken broadcast text only — do not include sound effect labels in brackets, emojis, hashtags, or asterisks.\n"
-        f"5. Return JSON ONLY with this exact schema:\n"
+        f"6. Return JSON ONLY with this exact schema:\n"
         f"{{\n"
         f'  "skipped": false,\n'
+        f'  "isSongRequest": false,\n'
+        f'  "songFound": false,\n'
+        f'  "requestedSongTitle": "",\n'
         f'  "languageCode": "ta-IN",\n'
         f'  "languageName": "Tamil",\n'
-        f'  "replyText": "spoken reply text here in listener\'s language answering their specific question and delivering any requested poem/story immediately"\n'
+        f'  "replyText": "spoken reply text here in listener\'s language"\n'
         f"}}"
     )
 
@@ -215,7 +247,15 @@ async def generate_rj_chat_reply(
         if parsed:
             is_skipped = parsed.get("skipped") is True or str(parsed.get("replyText", "")).strip().upper() == "SKIP"
             if is_skipped:
-                return {"skipped": True, "text": "", "languageCode": "en-US", "languageName": "English"}
+                return {
+                    "skipped": True,
+                    "text": "",
+                    "languageCode": "en-US",
+                    "languageName": "English",
+                    "isSongRequest": False,
+                    "songFound": False,
+                    "requestedSongTitle": "",
+                }
 
             reply = re.sub(r'["#*]', "", str(parsed.get("replyText", "")))[:1000].strip()
             if reply:
@@ -224,6 +264,9 @@ async def generate_rj_chat_reply(
                     "text": reply,
                     "languageCode": parsed.get("languageCode") or "en-US",
                     "languageName": parsed.get("languageName") or "English",
+                    "isSongRequest": bool(parsed.get("isSongRequest")),
+                    "songFound": bool(parsed.get("songFound")),
+                    "requestedSongTitle": str(parsed.get("requestedSongTitle") or "").strip(),
                 }
 
         # Resilient regex fallback for multiline poems/stories inside replyText JSON
@@ -232,11 +275,17 @@ async def generate_rj_chat_reply(
             reply = re.sub(r'["#*]', "", reply_match.group(1)).replace("\\n", "\n").replace('\\"', '"')[:1000].strip()
             if reply and reply.upper() != "SKIP":
                 script = detect_script_language(reply) or "en-US"
+                req_match = re.search(r'"requestedSongTitle"\s*:\s*"([^"]+)"', raw)
+                is_req = '"isSongRequest": true' in raw or '"isSongRequest":true' in raw
+                found = '"songFound": true' in raw or '"songFound":true' in raw
                 return {
                     "skipped": False,
                     "text": reply,
                     "languageCode": script,
                     "languageName": "Detected",
+                    "isSongRequest": is_req,
+                    "songFound": found,
+                    "requestedSongTitle": req_match.group(1) if req_match else "",
                 }
 
         if raw.strip().upper() == "SKIP":

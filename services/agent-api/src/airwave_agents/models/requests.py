@@ -46,6 +46,7 @@ class ProcessMessageRequest(BaseModel):
     voice: Optional[str] = Field(default=None, description="Broadcaster voice style: 'male', 'female', or 'studio'")
     speakingRate: Optional[float] = Field(default=None, ge=0.5, le=2.0, description="Speech rate factor")
     aiPersona: Optional[str] = Field(default=None, description="Optional custom station AI persona or tone")
+    playlist: Optional[list[dict]] = Field(default=None, description="Broadcaster station playlist tracks")
 
 
 
