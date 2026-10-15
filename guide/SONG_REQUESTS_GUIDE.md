@@ -1,6 +1,6 @@
 # Song Request & Dynamic Play Next — Guide & Architecture
 
-This guide explains how the **Intelligent Song Request** feature works across **Airwave Agents** (`agent-api`, `apps/web`, and Android `integrations/transmiter`).
+This guide explains how the **Intelligent Song Request** feature works across **Airwave Agents** (`agent-api`, `apps/web`, and Android `apps/android/transmiter`).
 
 ---
 
@@ -72,10 +72,10 @@ This guide explains how the **Intelligent Song Request** feature works across **
 | Component | File Path | Role |
 |---|---|---|
 | **AI Prompt & Request Detection** | [`gemini.py`](file:///Volumes/android/AI%20Builder%20Cup%202026/Airwave%20Agents/airwave-agents/services/agent-api/src/airwave_agents/services/gemini.py) | Rule 3 prompts for song request identification and dedication drafting. |
-| **Playlist Fuzzy Matcher** | [`Playlist.kt`](file:///Volumes/android/AI%20Builder%20Cup%202026/Airwave%20Agents/airwave-agents/integrations/transmiter/app/src/main/java/lk/sugaapps/airwave/engine/Playlist.kt) | `findTrackByTitleOrQuery()` strips conversational phrases and matches titles. |
-| **Up Next Re-order Engine** | [`Playlist.kt`](file:///Volumes/android/AI%20Builder%20Cup%202026/Airwave%20Agents/airwave-agents/integrations/transmiter/app/src/main/java/lk/sugaapps/airwave/engine/Playlist.kt) | `moveTrackToPlayNext()` shifts the requested song ahead of other queued tracks. |
-| **On-Air Dispatcher** | [`ChatOnAirManager.kt`](file:///Volumes/android/AI%20Builder%20Cup%202026/Airwave%20Agents/airwave-agents/integrations/transmiter/app/src/main/java/lk/sugaapps/airwave/data/ChatOnAirManager.kt) | Coordinates Firestore chat listener, audio caching, and toast notifications. |
-| **Library Synchronizer** | [`StationManager.kt`](file:///Volumes/android/AI%20Builder%20Cup%202026/Airwave%20Agents/airwave-agents/integrations/transmiter/app/src/main/java/lk/sugaapps/airwave/data/StationManager.kt) | Syncs active playlist tracks to `stations/{uid}` document in Firestore. |
+| **Playlist Fuzzy Matcher** | [`Playlist.kt`](file:///Volumes/android/AI%20Builder%20Cup%202026/Airwave%20Agents/airwave-agents/apps/android/transmiter/app/src/main/java/lk/sugaapps/airwave/engine/Playlist.kt) | `findTrackByTitleOrQuery()` strips conversational phrases and matches titles. |
+| **Up Next Re-order Engine** | [`Playlist.kt`](file:///Volumes/android/AI%20Builder%20Cup%202026/Airwave%20Agents/airwave-agents/apps/android/transmiter/app/src/main/java/lk/sugaapps/airwave/engine/Playlist.kt) | `moveTrackToPlayNext()` shifts the requested song ahead of other queued tracks. |
+| **On-Air Dispatcher** | [`ChatOnAirManager.kt`](file:///Volumes/android/AI%20Builder%20Cup%202026/Airwave%20Agents/airwave-agents/apps/android/transmiter/app/src/main/java/lk/sugaapps/airwave/data/ChatOnAirManager.kt) | Coordinates Firestore chat listener, audio caching, and toast notifications. |
+| **Library Synchronizer** | [`StationManager.kt`](file:///Volumes/android/AI%20Builder%20Cup%202026/Airwave%20Agents/airwave-agents/apps/android/transmiter/app/src/main/java/lk/sugaapps/airwave/data/StationManager.kt) | Syncs active playlist tracks to `stations/{uid}` document in Firestore. |
 
 ---
 

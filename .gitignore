@@ -33,7 +33,7 @@ build/
 
 # === Media / audio assets (large binaries — kept local, not published) ===
 tracks/
-integrations/transmiter/app/src/main/assets/tracks/
+apps/android/transmiter/app/src/main/assets/tracks/
 
 # === Logs ===
 logs/
@@ -45,13 +45,13 @@ logs/
 .vscode/
 
 # === Private UI (reproductions of the existing app) — kept local, not published ===
-integrations/transmiter/app/src/main/java/lk/sugaapps/airwave/ui/screens/HomeScreen.kt
-integrations/transmiter/app/src/main/java/lk/sugaapps/airwave/ui/screens/MixerScreen.kt
-integrations/transmiter/app/src/main/java/lk/sugaapps/airwave/ui/screens/EqualizerScreen.kt
-integrations/transmiter/app/src/main/java/lk/sugaapps/airwave/ui/screens/LibraryScreen.kt
-integrations/transmiter/app/src/main/java/lk/sugaapps/airwave/ui/screens/SettingsScreen.kt
-integrations/transmiter/app/src/main/java/lk/sugaapps/airwave/PrivateExperience.kt
+apps/android/transmiter/app/src/main/java/lk/sugaapps/airwave/ui/screens/HomeScreen.kt
+apps/android/transmiter/app/src/main/java/lk/sugaapps/airwave/ui/screens/MixerScreen.kt
+apps/android/transmiter/app/src/main/java/lk/sugaapps/airwave/ui/screens/EqualizerScreen.kt
+apps/android/transmiter/app/src/main/java/lk/sugaapps/airwave/ui/screens/LibraryScreen.kt
+apps/android/transmiter/app/src/main/java/lk/sugaapps/airwave/ui/screens/SettingsScreen.kt
+apps/android/transmiter/app/src/main/java/lk/sugaapps/airwave/PrivateExperience.kt
 
 # === Private native broadcast engine (proprietary C++ + JNI) — kept local, not published ===
-integrations/transmiter/app/src/main/cpp/
-integrations/transmiter/app/src/main/java/lk/sugastreamapps/
+apps/android/transmiter/app/src/main/cpp/
+apps/android/transmiter/app/src/main/java/lk/sugastreamapps/

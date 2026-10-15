@@ -9,10 +9,10 @@ this repo. Read this first. For full status and what's already built, see
 **Airwave Agents** — AI Builder Cup 2026 entry. A Gemini-powered AI radio co-host on an
 Icecast/Shoutcast stack. Monorepo with two clients + a backend:
 
-- `integrations/transmiter/` — Android transmitter app (Kotlin + Compose + native C++). **Built.**
+- `apps/android/transmiter/` — Android transmitter app (Kotlin + Compose + native C++). **Built.**
 - `apps/web/` — listener web app. *Scaffold.*
 - `services/agent-api/` — Gemini co-host backend (Cloud Run, Python). *Scaffold.*
-- `integrations/core-app/` — private git submodule (the original proprietary app).
+- `apps/android/core-app/` — private git submodule (the original proprietary app).
 
 Default to the latest, most capable Gemini / Claude models. Keep AI/LLM provider calls
 in `services/agent-api/`, never in the clients.
@@ -23,7 +23,7 @@ The public repo must never expose the proprietary engine, the reproduced UI of t
 existing app, or any credentials. The seam is already built; respect it:
 
 - **Private (git-ignored, local only — never commit):**
-  - Native engine: `integrations/transmiter/app/src/main/cpp/**`, `AudioStreamer.kt`,
+  - Native engine: `apps/android/transmiter/app/src/main/cpp/**`, `AudioStreamer.kt`,
     `RealBroadcastEngine.kt`, `PrivateExperience.kt`.
   - Reproduced screens: `ui/screens/{HomeScreen,MixerScreen,EqualizerScreen,LibraryScreen,SettingsScreen}.kt`.
   - `google-services.json`, keystores (`*.jks`/`*.keystore`), all stream credentials, `.env`.
@@ -39,7 +39,7 @@ Before committing, verify no secret is tracked (e.g. `git grep <value>` returns 
 ## Hard rules
 
 - **Never commit secrets** — they belong in git-ignored files or the environment. See `RULES.md`.
-- **The core app stays private** — `integrations/core-app/` is a submodule; commit the
+- **The core app stays private** — `apps/android/core-app/` is a submodule; commit the
   pointer only, never its source, and don't edit inside the checkout as public-repo work.
 - **Handle every state** — any function that does real work (async: auth, network,
   Firestore, audio/IO, streaming) must handle **loading, success, error (clear user-facing
@@ -51,7 +51,7 @@ Before committing, verify no secret is tracked (e.g. `git grep <value>` returns 
 ## Build / run (transmitter app)
 
 ```
-cd integrations/transmiter
+cd apps/android/transmiter
 ./gradlew :app:assembleDebug          # builds native engine (arm64) when cpp/ is present
 ./gradlew :app:installDebug           # install to a connected device
 ```

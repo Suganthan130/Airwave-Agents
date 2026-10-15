@@ -1,3 +1,3 @@
 [submodule "integrations/core-app"]
-	path = integrations/core-app
+	path = apps/android/core-app
 	url = https://github.com/Suganthan130/BroadcastMySelf-Radio-Tool.git
