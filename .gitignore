@@ -44,12 +44,7 @@ logs/
 .idea/
 .vscode/
 
-# === Private UI (reproductions of the existing app) — kept local, not published ===
-apps/android/transmiter/app/src/main/java/lk/sugaapps/airwave/ui/screens/HomeScreen.kt
-apps/android/transmiter/app/src/main/java/lk/sugaapps/airwave/ui/screens/MixerScreen.kt
-apps/android/transmiter/app/src/main/java/lk/sugaapps/airwave/ui/screens/EqualizerScreen.kt
-apps/android/transmiter/app/src/main/java/lk/sugaapps/airwave/ui/screens/LibraryScreen.kt
-apps/android/transmiter/app/src/main/java/lk/sugaapps/airwave/ui/screens/SettingsScreen.kt
+# === Private UI — kept local, not published ===
 apps/android/transmiter/app/src/main/java/lk/sugaapps/airwave/PrivateExperience.kt
 
 # === Private native broadcast engine (proprietary C++ + JNI) — kept local, not published ===
