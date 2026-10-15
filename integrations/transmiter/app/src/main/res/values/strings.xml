@@ -1,3 +1,54 @@
 <resources>
   <string name="app_name">AirWave</string>
+
+  <!-- Login screen -->
+  <string name="brand_name">Airwave Agents</string>
+  <string name="login_subtitle">Broadcast console sign-in</string>
+  <string name="login_heading">Log in to your account</string>
+  <string name="login_email_label">Work email</string>
+  <string name="login_email_hint">name@station.com</string>
+  <string name="login_password_label">Password</string>
+  <string name="login_forgot">Forgot password?</string>
+  <string name="login_show">Show</string>
+  <string name="login_hide">Hide</string>
+  <string name="login_submit">Log in</string>
+  <string name="login_or">OR</string>
+  <string name="login_google">Continue with Google</string>
+  <string name="login_no_account">Don\'t have an account?</string>
+  <string name="login_signup">Sign up</string>
+
+  <!-- Sign up screen -->
+  <string name="signup_subtitle">Create your broadcast account</string>
+  <string name="signup_heading">Create an account</string>
+  <string name="signup_name_label">Full name</string>
+  <string name="signup_name_hint">Jane Broadcaster</string>
+  <string name="signup_email_label">Work email</string>
+  <string name="signup_email_hint">name@station.com</string>
+  <string name="signup_password_label">Password</string>
+  <string name="signup_confirm_label">Confirm password</string>
+  <string name="signup_submit">Create account</string>
+  <string name="signup_google">Continue with Google</string>
+  <string name="signup_terms">By continuing you agree to our Terms of Service and Privacy Policy.</string>
+  <string name="signup_have_account">Already have an account?</string>
+  <string name="signup_login">Log in</string>
+
+  <!-- Home / Broadcast console -->
+  <string name="home_title">Broadcast console</string>
+  <string name="home_status_live">ON AIR</string>
+  <string name="home_status_offline">OFFLINE</string>
+  <string name="home_go_live">Go live</string>
+  <string name="home_end_broadcast">End broadcast</string>
+  <string name="home_stat_listeners">Listeners</string>
+  <string name="home_stat_bitrate">Bitrate</string>
+  <string name="home_stat_latency">Latency</string>
+  <string name="home_mic_live">Mic live</string>
+  <string name="home_mic_muted">Mic muted</string>
+  <string name="home_now_playing">Now playing</string>
+  <string name="home_quick_mixer">Mixer</string>
+  <string name="home_quick_tracks">Tracks</string>
+  <string name="tab_broadcast">Broadcast</string>
+  <string name="tab_mixer">Mixer</string>
+  <string name="tab_ai">AI</string>
+  <string name="tab_tracks">Tracks</string>
+  <string name="tab_settings">Settings</string>
 </resources>
