@@ -12,9 +12,13 @@ google-services.json
 GoogleService-Info.plist
 .firebaserc
 
-# Android signing
+# Android signing & release artifacts
 *.jks
 *.keystore
+*.apk
+*.aab
+**/mapping.txt
+apps/android/transmiter/app/release/
 
 # === Python ===
 __pycache__/
@@ -50,3 +54,7 @@ apps/android/transmiter/app/src/main/java/lk/sugaapps/airwave/PrivateExperience.
 # === Private native broadcast engine (proprietary C++ + JNI) — kept local, not published ===
 apps/android/transmiter/app/src/main/cpp/
 apps/android/transmiter/app/src/main/java/lk/sugastreamapps/
+
+# === Prototype submission (kept local, not published) ===
+Prototype Submission/
+prototype_submission/
