@@ -24,6 +24,7 @@ import { ChatBox } from "./components/ChatBox.tsx";
 import { ProfileModal } from "./components/ProfileModal.tsx";
 import { RjAnnouncementBanner } from "./components/RjAnnouncementBanner.tsx";
 import { StationDirectoryModal } from "./components/StationDirectoryModal.tsx";
+import { AuthModal } from "./components/AuthModal.tsx";
 import { Sparkles, Headphones, ShieldCheck, Crown, Radio as RadioIcon, Share2, Check, WifiOff, AlertCircle, X } from "lucide-react";
 import { copyText } from "./lib/clipboard.ts";
 
@@ -41,6 +42,7 @@ export const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
   const [loadingAuth, setLoadingAuth] = useState(true);
   const [showProfileModal, setShowProfileModal] = useState(false);
+  const [showAuthModal, setShowAuthModal] = useState(false);
   const [canDismissModal, setCanDismissModal] = useState(false);
   const [showStationModal, setShowStationModal] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
@@ -480,7 +482,7 @@ export const App: React.FC = () => {
       <Header
         user={currentUser}
         loadingAuth={loadingAuth}
-        onSignIn={handleGoogleSignIn}
+        onSignIn={() => setShowAuthModal(true)}
         onSignOut={handleSignOut}
         onEditProfile={() => {
           setCanDismissModal(true);
@@ -627,7 +629,7 @@ export const App: React.FC = () => {
               user={currentUser}
               currentStation={currentStation}
               onSendMessage={handleSendMessage}
-              onSignIn={handleGoogleSignIn}
+              onSignIn={() => setShowAuthModal(true)}
               onPromptProfile={() => {
                 setCanDismissModal(false);
                 setShowProfileModal(true);
@@ -721,6 +723,13 @@ export const App: React.FC = () => {
         stations={stations}
         activeStationId={activeStationId}
         onSelectStation={handleSelectStation}
+      />
+
+      {/* Email/Password & Google Sign In Modal */}
+      <AuthModal
+        isOpen={showAuthModal}
+        onClose={() => setShowAuthModal(false)}
+        onSuccess={() => setShowAuthModal(false)}
       />
 
       {/* Transient toast notifications */}

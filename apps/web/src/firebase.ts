@@ -3,6 +3,9 @@ import {
   getAuth,
   GoogleAuthProvider,
   signInWithPopup,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  sendPasswordResetEmail,
   signOut as fbSignOut,
   onAuthStateChanged,
   type User as FirebaseUser,
@@ -39,6 +42,9 @@ googleProvider.setCustomParameters({ prompt: "select_account" });
 
 export {
   signInWithPopup,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  sendPasswordResetEmail,
   fbSignOut,
   onAuthStateChanged,
   doc,

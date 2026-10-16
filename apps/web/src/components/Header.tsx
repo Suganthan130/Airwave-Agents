@@ -277,7 +277,7 @@ export const Header: React.FC<HeaderProps> = ({
               className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-xs font-semibold rounded-full shadow-sm shadow-blue-500/20 transition"
             >
               <LogIn className="w-3.5 h-3.5" />
-              <span>Sign in with Google</span>
+              <span>Sign In (Email / Google)</span>
             </button>
           )}
         </div>

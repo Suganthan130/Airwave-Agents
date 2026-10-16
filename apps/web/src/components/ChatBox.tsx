@@ -274,7 +274,7 @@ export const ChatBox: React.FC<ChatBoxProps> = ({
           <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 text-center flex flex-col sm:flex-row items-center justify-between gap-3">
             <div className="text-left">
               <p className="text-xs font-semibold text-slate-800">
-                Sign in with Google to chat with the live AI Host
+                Sign in to chat with the live AI Host
               </p>
               <p className="text-[11px] text-slate-500">
                 Listeners get real-time on-air voice shoutouts and song replies!
@@ -285,7 +285,7 @@ export const ChatBox: React.FC<ChatBoxProps> = ({
               className="px-4 py-2 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-xs font-semibold rounded-xl flex items-center gap-2 shadow-sm transition"
             >
               <LogIn className="w-3.5 h-3.5" />
-              <span>Sign in with Google</span>
+              <span>Sign In (Email / Google)</span>
             </button>
           </div>
         ) : (
