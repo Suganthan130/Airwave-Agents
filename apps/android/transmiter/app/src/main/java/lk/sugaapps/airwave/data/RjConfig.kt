@@ -79,6 +79,19 @@ object RjConfig {
             else -> "Chirp 3 HD Host (Leda)"
         }
 
+    fun voiceCodeToIndex(code: String?): Int = when (code?.lowercase()?.trim()) {
+        "studio", "1", "female" -> VOICE_STUDIO
+        "tamil", "2" -> VOICE_TAMIL
+        else -> VOICE_CHIRP
+    }
+
+    fun speakingRateToIndex(rate: Float?): Int = when {
+        rate == null -> SPEED_NORMAL
+        rate <= 0.95f -> SPEED_RELAXED
+        rate >= 1.08f -> SPEED_FAST
+        else -> SPEED_NORMAL
+    }
+
     val intervalMinutes: Int
         get() = when (autoTimeIntervalIndex) {
             INTERVAL_15_MIN -> 15

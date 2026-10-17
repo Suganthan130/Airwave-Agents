@@ -15,5 +15,6 @@ object StreamConfig {
     @Volatile var channels: Int = 2
     @Volatile var bufferSize: Int = 4096
     @Volatile var autoReconnect: Boolean = true
+    @Volatile var serverType: Int = 0 // 0=Icecast 2, 1=Shoutcast
     @Volatile var publicListeningUrl: String = ""
 }

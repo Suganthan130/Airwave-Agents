@@ -119,7 +119,7 @@ export const App: React.FC = () => {
           const data = snapshot.data();
           const profile: UserProfile = {
             uid: fbUser.uid,
-            displayName: data.displayName || fbUser.displayName || "Listener",
+            displayName: data.displayName || data.name || fbUser.displayName || "Listener",
             email: fbUser.email,
             photoURL: fbUser.photoURL,
             country: data.country || "",
@@ -172,27 +172,30 @@ export const App: React.FC = () => {
         const list: BroadcasterStation[] = [];
         snapshot.forEach((d) => {
           const data = d.data();
-          const publicStream = (isValidPublicStream(data.publicListeningUrl) ? data.publicListeningUrl : "") ||
-            (isValidPublicStream(data.streamUrl) ? data.streamUrl : "");
+          const publicStream = (isValidPublicStream(data.streamUrl) ? data.streamUrl : "") ||
+            (isValidPublicStream(data.publicListeningUrl) ? data.publicListeningUrl : "");
           list.push({
             stationId: d.id,
-            uniqueId: data.uniqueId || d.id,
-            broadcasterId: data.broadcasterId || d.id,
+            stationTitle: data.stationTitle || (data.broadcasterName ? `${data.broadcasterName}'s Station` : "Live Station"),
             broadcasterName: data.broadcasterName || "",
             broadcasterEmail: data.broadcasterEmail,
-            stationTitle: data.stationTitle || (data.broadcasterName ? `${data.broadcasterName}'s Station` : "Live Station"),
             host: data.host,
             port: data.port,
             serverType: data.serverType,
             mount: data.mount,
-            publicListeningUrl: data.publicListeningUrl,
             publicPageUrl: data.publicPageUrl,
             streamUrl: publicStream,
             isLive: data.isLive ?? false,
             nowPlayingTrack: data.nowPlayingTrack || "",
             nowPlayingArtist: data.nowPlayingArtist || "",
             listenersCount: Number(data.listenersCount) || 0,
+            voice: data.voice,
+            speakingRate: data.speakingRate,
+            aiPersona: data.aiPersona,
+            playlist: data.playlist,
             updatedAt: data.updatedAt || Date.now(),
+            broadcasterId: data.stationId || data.broadcasterId || d.id,
+            uniqueId: data.stationId || data.uniqueId || d.id,
           });
         });
         setStations(list);
@@ -220,32 +223,30 @@ export const App: React.FC = () => {
     const unsubscribe = onSnapshot(stationRef, (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
-        const publicStream = (isValidPublicStream(data.publicListeningUrl) ? data.publicListeningUrl : "") ||
-          (isValidPublicStream(data.streamUrl) ? data.streamUrl : "");
+        const publicStream = (isValidPublicStream(data.streamUrl) ? data.streamUrl : "") ||
+          (isValidPublicStream(data.publicListeningUrl) ? data.publicListeningUrl : "");
         const st: BroadcasterStation = {
           stationId: docSnap.id,
-          uniqueId: data.uniqueId || docSnap.id,
-          broadcasterId: data.broadcasterId || docSnap.id,
+          stationTitle: data.stationTitle || (data.broadcasterName ? `${data.broadcasterName}'s Station` : "Live Station"),
           broadcasterName: data.broadcasterName || "",
           broadcasterEmail: data.broadcasterEmail,
-          stationTitle: data.stationTitle || (data.broadcasterName ? `${data.broadcasterName}'s Station` : "Live Station"),
           host: data.host,
           port: data.port,
           serverType: data.serverType,
           mount: data.mount,
-          publicListeningUrl: data.publicListeningUrl,
           publicPageUrl: data.publicPageUrl,
           streamUrl: publicStream,
           isLive: data.isLive ?? false,
           nowPlayingTrack: data.nowPlayingTrack || "",
           nowPlayingArtist: data.nowPlayingArtist || "",
           listenersCount: Number(data.listenersCount) || 0,
-          rjVoice: data.rjVoice,
           voice: data.voice,
-          rjSpeed: data.rjSpeed,
           speakingRate: data.speakingRate,
           aiPersona: data.aiPersona,
+          playlist: data.playlist,
           updatedAt: data.updatedAt || Date.now(),
+          broadcasterId: data.stationId || data.broadcasterId || docSnap.id,
+          uniqueId: data.stationId || data.uniqueId || docSnap.id,
         };
         setCurrentStation(st);
         setRadioStatus({
@@ -474,7 +475,7 @@ export const App: React.FC = () => {
   };
 
   const isBroadcasterOwner =
-    currentUser && currentStation && currentUser.uid === currentStation.broadcasterId;
+    currentUser && currentStation && (currentUser.uid === currentStation.stationId || currentUser.uid === currentStation.broadcasterId);
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col text-slate-900 selection:bg-blue-100 selection:text-blue-900">

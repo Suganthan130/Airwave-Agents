@@ -82,7 +82,10 @@ class MainActivity : ComponentActivity() {
                 // React to sign-out (e.g. from Settings) by returning to login.
                 DisposableEffect(Unit) {
                     val listener = AuthRepository.addAuthStateListener { user ->
-                        if (user == null && screen == AppScreen.HOME) screen = AppScreen.LOGIN
+                        if (user == null && screen == AppScreen.HOME) {
+                            lk.sugaapps.airwave.data.SettingsStore.reset(applicationContext)
+                            screen = AppScreen.LOGIN
+                        }
                     }
                     onDispose { AuthRepository.removeAuthStateListener(listener) }
                 }
@@ -96,7 +99,12 @@ class MainActivity : ComponentActivity() {
                     scope.launch {
                         try {
                             val user = withTimeoutOrNull(30_000) { AuthRepository.loginEmail(email, password) }
-                            if (user == null) toast(timedOut) else screen = AppScreen.HOME
+                            if (user == null) {
+                                toast(timedOut)
+                            } else {
+                                lk.sugaapps.airwave.data.SettingsStore.reset(applicationContext)
+                                screen = AppScreen.HOME
+                            }
                         } catch (t: Throwable) {
                             toast(AuthErrors.message(t))
                         } finally {

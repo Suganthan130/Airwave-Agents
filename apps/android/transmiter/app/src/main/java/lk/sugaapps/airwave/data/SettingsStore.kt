@@ -39,11 +39,11 @@ object SettingsStore {
 
     data class State(
         val serverType: Int = 0,
-        val host: String = "us1-broadcast.radiostreamhub.com",
-        val port: String = "80",
-        val mount: String = "/tenaN9M6/source",
+        val host: String = "163.245.218.61",
+        val port: String = "8005",
+        val mount: String = "/",
         val username: String = "source",
-        val password: String = "WSvTkCEr",
+        val password: String = "9EpTzPzj",
         val bitrate: Int = 1,
         val sampleRate: Int = 0,
         val channels: Int = 1,
@@ -54,7 +54,7 @@ object SettingsStore {
         val rjSpeed: Int = 1,
         val autoTimeInterval: Int = 0,
         val stationTitle: String = "",
-        val publicListeningUrl: String = "",
+        val publicListeningUrl: String = "https://us1.radiostreamhub.com/listen/ai_builder_cup_2026_-_airwave-agents/radio.mp3",
         val takeoverEnabled: Boolean = false,
         val takeoverNewsInterval: Int = 10,
         val takeoverTimeInterval: Int = 30,
@@ -65,17 +65,21 @@ object SettingsStore {
     private fun prefs(context: Context): SharedPreferences =
         context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
+    fun reset(context: Context) {
+        prefs(context).edit().clear().apply()
+    }
+
     /**
      * Loads all settings from SharedPreferences.
      * If not previously saved, falls back to current StreamConfig / PrivateExperience defaults.
      */
     fun load(context: Context): State {
         val p = prefs(context)
-        val defaultHost = StreamConfig.host.ifBlank { "us1-broadcast.radiostreamhub.com" }
-        val defaultPort = if (StreamConfig.port > 0) StreamConfig.port.toString() else "80"
-        val defaultMount = StreamConfig.mount.ifBlank { "/tenaN9M6/source" }
+        val defaultHost = StreamConfig.host.ifBlank { "http://us1.radiostreamhub.com" }
+        val defaultPort = if (StreamConfig.port > 0) StreamConfig.port.toString() else "8005"
+        val defaultMount = StreamConfig.mount.ifBlank { "/live" }
         val defaultUser = StreamConfig.user.ifBlank { "source" }
-        val defaultPass = StreamConfig.password.ifBlank { "WSvTkCEr" }
+        val defaultPass = StreamConfig.password.ifBlank { "hAdLdHy4" }
         val defaultBitrate = when (StreamConfig.bitrate) {
             64 -> 0
             192 -> 2
@@ -85,7 +89,9 @@ object SettingsStore {
         val defaultSampleRate = if (StreamConfig.sampleRate == 48000) 1 else 0
         val defaultChannels = if (StreamConfig.channels == 1) 0 else 1
         val defaultAutoReconnect = StreamConfig.autoReconnect
-        val defaultPublicUrl = StreamConfig.publicListeningUrl
+        val defaultPublicUrl = StreamConfig.publicListeningUrl.ifBlank {
+            "https://us1.radiostreamhub.com/listen/ai_builder_cup_2026_-_airwave-agents/radio.mp3"
+        }
 
         return State(
             serverType = p.getInt(KEY_SERVER_TYPE, 0),
@@ -158,6 +164,7 @@ object SettingsStore {
         StreamConfig.sampleRate = if (state.sampleRate == 1) 48000 else 44100
         StreamConfig.channels = if (state.channels == 0) 1 else 2
         StreamConfig.autoReconnect = state.autoReconnect
+        StreamConfig.serverType = state.serverType
         if (state.publicListeningUrl.isNotBlank() && StationManager.isValidPublicStreamUrl(state.publicListeningUrl)) {
             StreamConfig.publicListeningUrl = state.publicListeningUrl.trim()
         }

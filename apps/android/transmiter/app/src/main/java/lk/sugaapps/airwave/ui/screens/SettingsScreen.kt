@@ -20,6 +20,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -55,6 +56,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.ui.text.style.TextOverflow
 import lk.sugaapps.airwave.data.AuthRepository
 import lk.sugaapps.airwave.data.SettingsStore
+import lk.sugaapps.airwave.data.RjConfig
 import lk.sugaapps.airwave.data.StationManager
 import lk.sugaapps.airwave.data.UserStore
 import lk.sugaapps.airwave.engine.StreamConfig
@@ -115,12 +117,112 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
         if (autoTimeInterval != currentRjInterval) autoTimeInterval = currentRjInterval
     }
 
-    // Persist all settings immediately to SharedPreferences on every change so they never reset on navigation or reopen
+    var isLoadingRemote by remember { mutableStateOf(user != null) }
+
+    // Sync remote Firestore settings if available (always server-authoritative)
+    LaunchedEffect(user?.uid) {
+        val uid = user?.uid
+        if (uid == null) {
+            isLoadingRemote = false
+            return@LaunchedEffect
+        }
+        isLoadingRemote = true
+        val s = runCatching { withTimeoutOrNull(8000) { UserStore.loadSettings(uid) } }.getOrNull()
+        val station = runCatching { withTimeoutOrNull(8000) { StationManager.getStation(uid) } }.getOrNull()
+
+        val rHost = s?.get("host")?.toString()?.takeIf { it.isNotBlank() }
+            ?: station?.get("host")?.toString()?.takeIf { it.isNotBlank() }
+        val rPort = s?.get("port")?.toString()?.takeIf { it.isNotBlank() }
+            ?: station?.get("port")?.toString()?.takeIf { it.isNotBlank() }
+        val rMount = s?.get("mount")?.toString()?.takeIf { it.isNotBlank() }
+            ?: station?.get("mount")?.toString()?.takeIf { it.isNotBlank() }
+        val rUser = s?.get("username")?.toString()?.takeIf { it.isNotBlank() }
+        val rPass = s?.get("password")?.toString()?.takeIf { it.isNotBlank() }
+        val rServerTypeRaw = (s?.get("serverType") ?: station?.get("serverType"))?.toString()
+        val rServerType = if (rServerTypeRaw == "1" || rServerTypeRaw?.contains("Shoutcast", ignoreCase = true) == true) 1 else 0
+
+        if (rHost != null) host = rHost
+        if (rPort != null) port = rPort
+        if (rMount != null) mount = rMount
+        if (rUser != null) username = rUser
+        if (rPass != null) password = rPass
+        serverType = rServerType
+
+        s?.let {
+            (it["bitrate"] as? Number)?.let { b -> bitrate = b.toInt() }
+            (it["sampleRate"] as? Number)?.let { sr -> sampleRate = sr.toInt() }
+            (it["channels"] as? Number)?.let { ch -> channels = ch.toInt() }
+            (it["keepScreenOn"] as? Boolean)?.let { k -> keepScreenOn = k }
+            (it["autoReconnect"] as? Boolean)?.let { ar -> autoReconnect = ar }
+            (it["lowLatency"] as? Boolean)?.let { ll -> lowLatency = ll }
+            (it["stationTitle"] as? String)?.takeIf { t -> t.isNotBlank() }?.let { t -> stationTitle = t }
+            (it["autoTimeInterval"] as? Number)?.let { ti -> autoTimeInterval = ti.toInt() }
+
+            val voiceStr = (it["voice"] as? String)
+            if (voiceStr != null) {
+                rjVoice = RjConfig.voiceCodeToIndex(voiceStr)
+            } else {
+                (it["rjVoice"] as? Number)?.let { v -> rjVoice = v.toInt() }
+            }
+
+            val rateNum = (it["speakingRate"] as? Number)?.toFloat()
+            if (rateNum != null) {
+                rjSpeed = RjConfig.speakingRateToIndex(rateNum)
+            } else {
+                (it["rjSpeed"] as? Number)?.let { sp -> rjSpeed = sp.toInt() }
+            }
+        }
+
+        val streamVal = (s?.get("streamUrl")?.toString())?.takeIf { StationManager.isValidPublicStreamUrl(it) }
+            ?: (s?.get("publicListeningUrl")?.toString())?.takeIf { StationManager.isValidPublicStreamUrl(it) }
+            ?: (station?.get("streamUrl")?.toString())?.takeIf { StationManager.isValidPublicStreamUrl(it) }
+            ?: (station?.get("publicListeningUrl")?.toString())?.takeIf { StationManager.isValidPublicStreamUrl(it) }
+        if (streamVal != null) publicListeningUrl = streamVal
+
+        val title = (station?.get("stationTitle") as? String) ?: (s?.get("stationTitle") as? String)
+        if (!title.isNullOrBlank() && (stationTitle.isBlank() || stationTitle.endsWith("'s Live Radio"))) {
+            stationTitle = title
+        }
+
+        // Apply directly to SharedPreferences and StreamConfig so the broadcast engine receives server config
+        val state = SettingsStore.State(
+            serverType = serverType,
+            host = host,
+            port = port,
+            mount = mount,
+            username = username,
+            password = password,
+            bitrate = bitrate,
+            sampleRate = sampleRate,
+            channels = channels,
+            keepScreenOn = keepScreenOn,
+            autoReconnect = autoReconnect,
+            lowLatency = lowLatency,
+            rjVoice = rjVoice,
+            rjSpeed = rjSpeed,
+            autoTimeInterval = autoTimeInterval,
+            stationTitle = stationTitle,
+            publicListeningUrl = publicListeningUrl,
+            takeoverEnabled = lk.sugaapps.airwave.data.RjConfig.isTakeoverEnabled,
+            takeoverNewsInterval = lk.sugaapps.airwave.data.RjConfig.takeoverNewsIntervalMinutes,
+            takeoverTimeInterval = lk.sugaapps.airwave.data.RjConfig.takeoverTimeIntervalMinutes,
+            takeoverAutoReplay = lk.sugaapps.airwave.data.RjConfig.autoReplay,
+            takeoverNewsMode = lk.sugaapps.airwave.data.RjConfig.takeoverNewsMode,
+        )
+        SettingsStore.save(context, state)
+        SettingsStore.applyToEngine(state)
+
+        isLoadingRemote = false
+    }
+
+    // Persist all user-edited settings to SharedPreferences once remote sync is complete
     LaunchedEffect(
+        isLoadingRemote,
         serverType, host, port, mount, username, password,
         bitrate, sampleRate, channels, keepScreenOn, autoReconnect,
         lowLatency, rjVoice, rjSpeed, autoTimeInterval, stationTitle, publicListeningUrl
     ) {
+        if (isLoadingRemote) return@LaunchedEffect
         val state = SettingsStore.State(
             serverType = serverType,
             host = host,
@@ -149,43 +251,6 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
         SettingsStore.applyToEngine(state)
     }
 
-    // Sync remote Firestore settings if available (keeps SharedPreferences up to date)
-    LaunchedEffect(user?.uid) {
-        val uid = user?.uid ?: return@LaunchedEffect
-        runCatching { withTimeoutOrNull(8000) { UserStore.loadSettings(uid) } }.getOrNull()?.let { s ->
-            (s["serverType"] as? Number)?.let { serverType = it.toInt() }
-            (s["host"] as? String)?.takeIf { it.isNotBlank() }?.let { host = it }
-            (s["port"] as? String)?.takeIf { it.isNotBlank() }?.let { port = it }
-            (s["mount"] as? String)?.takeIf { it.isNotBlank() }?.let { mount = it }
-            (s["username"] as? String)?.takeIf { it.isNotBlank() }?.let { username = it }
-            (s["password"] as? String)?.takeIf { it.isNotBlank() }?.let { password = it }
-            (s["bitrate"] as? Number)?.let { bitrate = it.toInt() }
-            (s["sampleRate"] as? Number)?.let { sampleRate = it.toInt() }
-            (s["channels"] as? Number)?.let { channels = it.toInt() }
-            (s["keepScreenOn"] as? Boolean)?.let { keepScreenOn = it }
-            (s["autoReconnect"] as? Boolean)?.let { autoReconnect = it }
-            (s["lowLatency"] as? Boolean)?.let { lowLatency = it }
-            (s["stationTitle"] as? String)?.takeIf { it.isNotBlank() }?.let { stationTitle = it }
-            (s["publicListeningUrl"] as? String)?.takeIf { StationManager.isValidPublicStreamUrl(it) }?.let { publicListeningUrl = it }
-            (s["rjVoice"] as? Number)?.let { rjVoice = it.toInt() }
-            (s["rjSpeed"] as? Number)?.let { rjSpeed = it.toInt() }
-            (s["autoTimeInterval"] as? Number)?.let { autoTimeInterval = it.toInt() }
-        }
-        // Also check StationManager document for publicListeningUrl if empty
-        runCatching {
-            val station = StationManager.getStation(uid)
-            val stream = (station?.get("publicListeningUrl") as? String)
-                ?: (station?.get("streamUrl") as? String)
-            if (!stream.isNullOrBlank() && StationManager.isValidPublicStreamUrl(stream) && publicListeningUrl.isBlank()) {
-                publicListeningUrl = stream
-            }
-            val title = station?.get("stationTitle") as? String
-            if (!title.isNullOrBlank() && (stationTitle.isBlank() || stationTitle.endsWith("'s Live Radio"))) {
-                stationTitle = title
-            }
-        }
-    }
-
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -193,6 +258,29 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
+        if (isLoadingRemote) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(BrandBlue.copy(alpha = 0.08f))
+                    .padding(12.dp),
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = BrandBlue)
+                    Text(
+                        "Loading live broadcast configuration from cloud…",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = BrandBlue,
+                        fontWeight = FontWeight.Medium,
+                    )
+                }
+            }
+        }
+
         // Account
         SectionCard {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -442,9 +530,10 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
                         val effectiveStream = publicListeningUrl.trim().takeIf { StationManager.isValidPublicStreamUrl(it) }
                             ?: StreamConfig.publicListeningUrl.takeIf { StationManager.isValidPublicStreamUrl(it) }
                             ?: ""
+                        val hostToSave = host.trim()
                         val finalState = SettingsStore.State(
                             serverType = serverType,
-                            host = host.trim(),
+                            host = hostToSave,
                             port = port.trim(),
                             mount = mount.trim(),
                             username = username.trim(),
@@ -474,10 +563,10 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
                                 uid,
                                 mapOf(
                                     "serverType" to serverType,
-                                    "host" to host,
-                                    "port" to port,
-                                    "mount" to mount,
-                                    "username" to username,
+                                    "host" to hostToSave,
+                                    "port" to port.trim(),
+                                    "mount" to mount.trim(),
+                                    "username" to username.trim(),
                                     "password" to password,
                                     "bitrate" to bitrate,
                                     "sampleRate" to sampleRate,
@@ -486,7 +575,7 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
                                     "autoReconnect" to autoReconnect,
                                     "lowLatency" to lowLatency,
                                     "stationTitle" to stationTitle,
-                                    "publicListeningUrl" to effectiveStream,
+                                    "streamUrl" to effectiveStream,
                                     "rjVoice" to rjVoice,
                                     "rjSpeed" to rjSpeed,
                                     "autoTimeInterval" to autoTimeInterval,
@@ -497,7 +586,7 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
                                 uid = uid,
                                 broadcasterName = userName,
                                 broadcasterEmail = userEmail,
-                                host = host.trim(),
+                                host = hostToSave,
                                 port = port.trim(),
                                 serverType = if (serverType == 0) "Icecast 2" else "Shoutcast",
                                 mount = mount.trim(),
@@ -528,7 +617,7 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
         // About
         SectionCard(title = "About") {
             Text("Airwave Agents — Transmitter", style = MaterialTheme.typography.bodyLarge, color = TextPrimary)
-            Text("Version 1.0 (preview)", style = MaterialTheme.typography.bodySmall, color = TextMuted)
+            Text("Version 1.4", style = MaterialTheme.typography.bodySmall, color = TextMuted)
         }
     }
 
@@ -541,6 +630,7 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
             confirmButton = {
                 TextButton(onClick = {
                     showSignOutDialog = false
+                    SettingsStore.reset(context)
                     AuthRepository.signOut()
                 }) {
                     Text("Sign out", color = DangerRed, fontWeight = FontWeight.SemiBold)

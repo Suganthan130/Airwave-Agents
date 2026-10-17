@@ -2,6 +2,7 @@ package lk.sugaapps.airwave.data
 
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
+import com.google.firebase.firestore.Source
 
 /**
  * Manages broadcaster stations in Cloud Firestore.
@@ -30,7 +31,8 @@ object StationManager {
     }
 
     suspend fun getStation(uid: String): Map<String, Any>? =
-        runCatching { db.collection("stations").document(uid).get().await().data }.getOrNull()
+        runCatching { db.collection("stations").document(uid).get(Source.SERVER).await().data }
+            .getOrElse { runCatching { db.collection("stations").document(uid).get().await().data }.getOrNull() }
 
     /**
      * Registers or refreshes the broadcaster's public listener page in Firestore.
@@ -71,46 +73,29 @@ object StationManager {
         }
 
         val data = mutableMapOf<String, Any>(
-            "uniqueId" to uid,
             "stationId" to uid,
-            "broadcasterId" to uid,
             "broadcasterName" to broadcasterName,
             "broadcasterEmail" to broadcasterEmail,
-            "host" to host,
-            "port" to port,
-            "serverType" to serverType,
-            "mount" to mount,
             "publicPageUrl" to publicPage,
             "stationTitle" to title,
             "userType" to "broadcaster",
             "isLive" to isLive,
             "nowPlayingTrack" to nowTrack,
             "nowPlayingArtist" to nowArtist,
-            "rjVoice" to rjVoice,
             "voice" to voiceCode,
-            "rjSpeed" to rjSpeed,
             "speakingRate" to speakingRate,
-            "speed" to RjConfig.speedDisplayName,
             "updatedAt" to System.currentTimeMillis(),
         )
+        if (host.isNotBlank()) data["host"] = host
+        if (port.isNotBlank()) data["port"] = port
+        if (serverType.isNotBlank()) data["serverType"] = serverType
+        if (mount.isNotBlank()) data["mount"] = mount
         if (aiPersona.isNotBlank()) {
             data["aiPersona"] = aiPersona
         }
         if (stream.isNotBlank()) {
-            data["publicListeningUrl"] = stream
             data["streamUrl"] = stream
         }
-
-        val icecastStationSummary = mutableMapOf<String, Any>(
-            "host" to host,
-            "port" to port,
-            "serverType" to serverType,
-            "mount" to mount,
-            "streamUrl" to stream,
-            "publicListeningUrl" to stream,
-            "updatedAt" to System.currentTimeMillis(),
-        )
-        data["icecast"] = icecastStationSummary
 
         // Save to stations/{uid} — strictly one station per broadcaster user
         db.collection("stations").document(uid).set(data, SetOptions.merge()).await()
@@ -120,18 +105,16 @@ object StationManager {
             "userType" to "broadcaster",
             "stationId" to uid,
             "stationTitle" to title,
-            "host" to host,
-            "port" to port,
-            "mount" to mount,
-            "serverType" to serverType,
-            "rjVoice" to rjVoice,
             "voice" to voiceCode,
-            "rjSpeed" to rjSpeed,
             "speakingRate" to speakingRate,
             "updatedAt" to System.currentTimeMillis(),
         )
+        if (host.isNotBlank()) userUpdate["host"] = host
+        if (port.isNotBlank()) userUpdate["port"] = port
+        if (serverType.isNotBlank()) userUpdate["serverType"] = serverType
+        if (mount.isNotBlank()) userUpdate["mount"] = mount
         if (stream.isNotBlank()) {
-            userUpdate["publicListeningUrl"] = stream
+            userUpdate["streamUrl"] = stream
         }
         db.collection("users").document(uid).set(userUpdate, SetOptions.merge()).await()
     }
@@ -157,18 +140,15 @@ object StationManager {
             else -> 1.00f
         }
         val data = mutableMapOf<String, Any>(
-            "rjVoice" to rjVoice,
             "voice" to voiceCode,
-            "rjSpeed" to rjSpeed,
             "speakingRate" to speakingRate,
-            "speed" to RjConfig.speedDisplayName,
             "updatedAt" to System.currentTimeMillis(),
         )
         if (aiPersona.isNotBlank()) {
             data["aiPersona"] = aiPersona
         }
         db.collection("stations").document(uid).set(data, SetOptions.merge()).await()
-        db.collection("users").document(uid).set(mapOf("settings" to data), SetOptions.merge()).await()
+        db.collection("users").document(uid).set(data, SetOptions.merge()).await()
     }
 
     /**
@@ -177,7 +157,6 @@ object StationManager {
     suspend fun savePublicListeningUrl(uid: String, publicListeningUrl: String) {
         if (!isValidPublicStreamUrl(publicListeningUrl)) return
         val data = mapOf(
-            "publicListeningUrl" to publicListeningUrl.trim(),
             "streamUrl" to publicListeningUrl.trim(),
             "updatedAt" to System.currentTimeMillis(),
         )
@@ -202,7 +181,6 @@ object StationManager {
             "updatedAt" to System.currentTimeMillis(),
         )
         if (!streamUrl.isNullOrBlank() && isValidPublicStreamUrl(streamUrl)) {
-            data["publicListeningUrl"] = streamUrl.trim()
             data["streamUrl"] = streamUrl.trim()
         }
         db.collection("stations").document(uid).set(data, SetOptions.merge()).await()

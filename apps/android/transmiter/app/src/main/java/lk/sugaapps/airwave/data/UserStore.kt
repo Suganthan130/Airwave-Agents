@@ -2,6 +2,7 @@ package lk.sugaapps.airwave.data
 
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
+import com.google.firebase.firestore.Source
 
 /**
  * Cloud Firestore persistence (competition/Google code — public).
@@ -16,7 +17,7 @@ object UserStore {
     suspend fun saveProfile(uid: String, name: String, email: String) {
         user(uid).set(
             mapOf(
-                "name" to name,
+                "displayName" to name,
                 "email" to email,
                 "updatedAt" to System.currentTimeMillis(),
             ),
@@ -25,55 +26,75 @@ object UserStore {
     }
 
     suspend fun loadProfile(uid: String): Map<String, Any>? =
-        user(uid).get().await().data
+        runCatching { user(uid).get(Source.SERVER).await().data }
+            .getOrElse { runCatching { user(uid).get().await().data }.getOrNull() }
 
     suspend fun saveSettings(uid: String, settings: Map<String, Any>) {
-        val icecastMap = mutableMapOf<String, Any>()
-        settings["host"]?.let { icecastMap["host"] = it }
-        settings["port"]?.let { icecastMap["port"] = it }
-        settings["mount"]?.let { icecastMap["mount"] = it }
-        settings["username"]?.let { icecastMap["username"] = it }
-        settings["password"]?.let { icecastMap["password"] = it }
-        settings["serverType"]?.let {
-            icecastMap["serverType"] = if (it == 1 || it == "Shoutcast") "Shoutcast" else "Icecast 2"
+        val updateData = mutableMapOf<String, Any>()
+        settings.forEach { (k, v) ->
+            when (k) {
+                "publicListeningUrl" -> updateData["streamUrl"] = v
+                "settings", "icecast", "rjVoice", "rjSpeed", "speed" -> { /* skip redundant duplicates */ }
+                else -> updateData[k] = v
+            }
         }
-        settings["bitrate"]?.let { icecastMap["bitrate"] = it }
-        settings["sampleRate"]?.let { icecastMap["sampleRate"] = it }
-        settings["channels"]?.let { icecastMap["channels"] = it }
-        settings["autoReconnect"]?.let { icecastMap["autoReconnect"] = it }
-        settings["publicListeningUrl"]?.let { icecastMap["publicListeningUrl"] = it }
-        icecastMap["updatedAt"] = System.currentTimeMillis()
 
-        val updateData = mutableMapOf<String, Any>(
-            "settings" to settings,
-            "icecast" to icecastMap,
-            "updatedAt" to System.currentTimeMillis(),
-        )
-        settings["host"]?.let { updateData["host"] = it }
-        settings["port"]?.let { updateData["port"] = it }
-        settings["mount"]?.let { updateData["mount"] = it }
-        settings["username"]?.let { updateData["username"] = it }
-        settings["publicListeningUrl"]?.let { updateData["publicListeningUrl"] = it }
-        settings["stationTitle"]?.let { updateData["stationTitle"] = it }
+        // Canonical voice & speakingRate resolution
+        if (!updateData.containsKey("voice")) {
+            (settings["rjVoice"] as? Number)?.let {
+                updateData["voice"] = when (it.toInt()) {
+                    RjConfig.VOICE_STUDIO -> "studio"
+                    RjConfig.VOICE_TAMIL -> "tamil"
+                    else -> "chirp"
+                }
+            }
+        }
+        if (!updateData.containsKey("speakingRate")) {
+            (settings["rjSpeed"] as? Number)?.let {
+                updateData["speakingRate"] = when (it.toInt()) {
+                    RjConfig.SPEED_RELAXED -> 0.90f
+                    RjConfig.SPEED_FAST -> 1.12f
+                    else -> 1.00f
+                }
+            }
+        }
 
+        updateData["updatedAt"] = System.currentTimeMillis()
         user(uid).set(updateData, SetOptions.merge()).await()
     }
 
     @Suppress("UNCHECKED_CAST")
     suspend fun loadSettings(uid: String): Map<String, Any>? {
-        val snapshot = user(uid).get().await()
-        val settings = snapshot.get("settings") as? Map<String, Any>
-        val icecast = snapshot.get("icecast") as? Map<String, Any>
-        if (settings == null && icecast == null) return null
+        val snapshot = runCatching { user(uid).get(Source.SERVER).await() }
+            .getOrElse { user(uid).get().await() }
+        val data = snapshot.data ?: return null
         val merged = mutableMapOf<String, Any>()
-        if (settings != null) merged.putAll(settings)
-        if (icecast != null) {
-            icecast.forEach { (k, v) ->
-                if (!merged.containsKey(k) || merged[k] == null || (merged[k] as? String).isNullOrBlank()) {
-                    merged[k] = v
-                }
+
+        // Fallback for older legacy documents with nested maps
+        (data["icecast"] as? Map<String, Any>)?.let { merged.putAll(it) }
+        (data["settings"] as? Map<String, Any>)?.let { merged.putAll(it) }
+
+        // Root canonical fields take priority
+        data.forEach { (k, v) ->
+            if (k != "settings" && k != "icecast") {
+                merged[k] = v
             }
         }
+
+        // Normalize streamUrl <-> publicListeningUrl for callers
+        val stream = (merged["streamUrl"] as? String) ?: (merged["publicListeningUrl"] as? String)
+        if (!stream.isNullOrBlank()) {
+            merged["streamUrl"] = stream
+            merged["publicListeningUrl"] = stream
+        }
+
+        // Normalize displayName <-> name
+        val name = (merged["displayName"] as? String) ?: (merged["name"] as? String)
+        if (!name.isNullOrBlank()) {
+            merged["displayName"] = name
+            merged["name"] = name
+        }
+
         return merged
     }
 }
