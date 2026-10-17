@@ -39,7 +39,7 @@ object MixerStore {
     data class MixerState(
         val monitorLevel: Float = 0.6f,
         val monitorSource: Int = 2,
-        val micVol: Float = 0.8f,
+        val micVol: Float = 0f,
         val micMuted: Boolean = false,
         val musicVol: Float = 0.5f,
         val musicMuted: Boolean = false,
@@ -78,7 +78,7 @@ object MixerStore {
         val state = MixerState(
             monitorLevel = p.getFloat(KEY_MONITOR_LEVEL, 0.6f),
             monitorSource = p.getInt(KEY_MONITOR_SOURCE, 2),
-            micVol = p.getFloat(KEY_MIC_VOL, 0.8f),
+            micVol = p.getFloat(KEY_MIC_VOL, 0f),
             micMuted = p.getBoolean(KEY_MIC_MUTED, false),
             musicVol = p.getFloat(KEY_MUSIC_VOL, 0.5f),
             musicMuted = p.getBoolean(KEY_MUSIC_MUTED, false),

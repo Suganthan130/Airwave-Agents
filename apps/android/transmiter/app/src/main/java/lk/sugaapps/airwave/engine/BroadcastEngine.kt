@@ -20,6 +20,8 @@ interface BroadcastEngine {
     val musicPosition: StateFlow<Float>   // 0f..1f
     val isLive: StateFlow<Boolean>
     val isRecording: StateFlow<Boolean>
+    val micMuted: StateFlow<Boolean>
+    val musicMuted: StateFlow<Boolean>
 
     // Real connection state (from the engine, not optimistic):
     // 0 = connecting, 1 = connected/live, 2 = offline/disconnected.
@@ -72,6 +74,8 @@ object NoOpBroadcastEngine : BroadcastEngine {
     override val musicPosition = MutableStateFlow(0f)
     override val isLive = MutableStateFlow(false)
     override val isRecording = MutableStateFlow(false)
+    override val micMuted = MutableStateFlow(false)
+    override val musicMuted = MutableStateFlow(false)
     override val connectionState = MutableStateFlow(2)
     override val connectionMessage = MutableStateFlow("")
     override val connectionLatencyMs = MutableStateFlow(0L)
@@ -85,8 +89,8 @@ object NoOpBroadcastEngine : BroadcastEngine {
     override fun stopBroadcast() { isLive.value = false; isRecording.value = false; connectionState.value = 2 }
     override fun startRecording() { isRecording.value = true }
     override fun stopRecording() { isRecording.value = false }
-    override fun setMicMuted(muted: Boolean) {}
-    override fun setMusicMuted(muted: Boolean) {}
+    override fun setMicMuted(muted: Boolean) { micMuted.value = muted }
+    override fun setMusicMuted(muted: Boolean) { musicMuted.value = muted }
     override fun setMicVolume(volume: Float) {}
     override fun setMusicVolume(volume: Float) {}
     override fun setMonitorVolume(volume: Float) {}

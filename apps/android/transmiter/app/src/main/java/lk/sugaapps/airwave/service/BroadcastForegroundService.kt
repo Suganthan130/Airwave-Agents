@@ -16,8 +16,14 @@ import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.conflate
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import lk.sugaapps.airwave.MainActivity
 import lk.sugaapps.airwave.R
@@ -40,6 +46,8 @@ class BroadcastForegroundService : Service() {
     private var wakeLock: PowerManager.WakeLock? = null
     private var wifiLock: WifiManager.WifiLock? = null
     private var isForegroundActive = false
+    private var notificationJob: Job? = null
+    private val logicMonitor = ServiceLogicMonitor()
     private val engine: BroadcastEngine get() = EngineRegistry.engine
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -48,7 +56,7 @@ class BroadcastForegroundService : Service() {
         super.onCreate()
         createNotificationChannel()
         acquireLocks()
-        observeEngineState()
+        startNotificationUpdater()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -70,15 +78,7 @@ class BroadcastForegroundService : Service() {
     }
 
     private fun startForegroundWithNotification() {
-        val title = when (engine.connectionState.value) {
-            0 -> "🟡 Connecting... — Airwave Agents"
-            1 -> "🔴 ON AIR — Airwave Agents"
-            else -> if (engine.isRecording.value) "🎙️ Recording — Airwave Agents" else "🎙️ Broadcasting — Airwave Agents"
-        }
-        val notification = buildNotification(
-            title = title,
-            text = formatNowPlayingText(engine.currentTrackTitle.value, engine.currentTrackArtist.value)
-        )
+        val notification = createNotification(currentState())
 
         if (isForegroundActive) {
             val manager = getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
@@ -117,68 +117,71 @@ class BroadcastForegroundService : Service() {
         }
     }
 
-    private fun observeEngineState() {
-        // Update notification text when tracks change
-        serviceScope.launch {
-            engine.currentTrackTitle.collect { title ->
-                updateNotification(title, engine.currentTrackArtist.value)
-            }
-        }
+    /** Snapshot of the engine's live state used to render the notification. */
+    data class NotificationState(
+        val title: String,
+        val artist: String,
+        val isRecording: Boolean,
+        val connectionState: Int,
+        val connectionMessage: String,
+        val micMuted: Boolean,
+        val musicMuted: Boolean,
+    )
 
-        serviceScope.launch {
-            engine.currentTrackArtist.collect { artist ->
-                updateNotification(engine.currentTrackTitle.value, artist)
-            }
-        }
+    private fun currentState() = NotificationState(
+        title = engine.currentTrackTitle.value,
+        artist = engine.currentTrackArtist.value,
+        isRecording = engine.isRecording.value,
+        connectionState = engine.connectionState.value,
+        connectionMessage = engine.connectionMessage.value,
+        micMuted = engine.micMuted.value,
+        musicMuted = engine.musicMuted.value,
+    )
 
-        // Auto-update notification and auto-stop service when connection ends
-        serviceScope.launch {
-            engine.connectionState.collect { state ->
-                when (state) {
-                    0, 1 -> updateNotification(engine.currentTrackTitle.value, engine.currentTrackArtist.value)
-                    2 -> {
-                        if (!engine.isRecording.value) {
-                            stopBroadcastAndSelf()
-                        }
+    /**
+     * Single reactive updater (ported from the core app): combines the engine's
+     * state into one [NotificationState], keeps the one notification current, and
+     * lets [ServiceLogicMonitor] decide when a genuine error should stop the service.
+     */
+    private fun startNotificationUpdater() {
+        notificationJob?.cancel()
+        notificationJob = serviceScope.launch {
+            combine(
+                engine.currentTrackTitle,
+                engine.currentTrackArtist,
+                engine.isRecording,
+                engine.connectionState,
+                engine.connectionMessage,
+                engine.micMuted,
+                engine.musicMuted,
+            ) { args: Array<Any?> ->
+                NotificationState(
+                    title = args[0] as String,
+                    artist = args[1] as String,
+                    isRecording = args[2] as Boolean,
+                    connectionState = args[3] as Int,
+                    connectionMessage = args[4] as String,
+                    micMuted = args[5] as Boolean,
+                    musicMuted = args[6] as Boolean,
+                )
+            }
+                .distinctUntilChanged()
+                .conflate()
+                .collectLatest { state ->
+                    val action = logicMonitor.determineAction(state.connectionState, state.connectionMessage)
+                    if (action == ServiceLogicMonitor.ServiceAction.STOP_SERVICE) {
+                        // Give the UI a moment to surface the error, then shut down.
+                        delay(1000)
+                        stopBroadcastAndSelf()
+                        return@collectLatest
                     }
+                    val manager = getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+                    manager?.notify(NOTIFICATION_ID, createNotification(state))
                 }
-            }
-        }
-
-        serviceScope.launch {
-            engine.isRecording.collect { isRec ->
-                if (isRec) {
-                    updateNotification(engine.currentTrackTitle.value, engine.currentTrackArtist.value)
-                } else if (engine.connectionState.value == 2) {
-                    stopBroadcastAndSelf()
-                }
-            }
         }
     }
 
-    private fun updateNotification(track: String, artist: String) {
-        val title = when (engine.connectionState.value) {
-            0 -> "🟡 Connecting... — Airwave Agents"
-            1 -> "🔴 ON AIR — Airwave Agents"
-            else -> if (engine.isRecording.value) "🎙️ Recording — Airwave Agents" else "🎙️ Broadcasting — Airwave Agents"
-        }
-        val notification = buildNotification(
-            title = title,
-            text = formatNowPlayingText(track, artist)
-        )
-        val manager = getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
-        manager?.notify(NOTIFICATION_ID, notification)
-    }
-
-    private fun formatNowPlayingText(track: String, artist: String): String {
-        return if (track.isNotBlank() && track != "No track") {
-            if (artist.isNotBlank()) "Now Playing: $track — $artist" else "Now Playing: $track"
-        } else {
-            "Broadcasting live to listeners"
-        }
-    }
-
-    private fun buildNotification(title: String, text: String): Notification {
+    private fun createNotification(state: NotificationState): Notification {
         val appIntent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
@@ -199,14 +202,44 @@ class BroadcastForegroundService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0)
         )
 
+        val isConnected = state.connectionState == 1
+        val isConnecting = state.connectionState == 0
+
+        val title = if (state.title.isNotBlank() && state.title != "No track") state.title else "Airwave Agents"
+
+        // Content line: artist + mute indicators, with a LIVE / Connecting suffix.
+        var statusText = state.artist
+        val indicators = mutableListOf<String>()
+        if (state.micMuted) indicators.add("🔇 Mic")
+        if (state.musicMuted) indicators.add("🔇 Music")
+        if (indicators.isNotEmpty()) {
+            statusText = if (statusText.isBlank()) indicators.joinToString(" ") else "$statusText • ${indicators.joinToString(" ")}"
+        }
+        val contentText = when {
+            isConnecting -> "Connecting…"
+            isConnected -> if (statusText.isBlank()) "LIVE" else "$statusText • LIVE"
+            else -> statusText
+        }
+
+        val subText = when {
+            state.isRecording && isConnected -> "Recording • Live"
+            isConnected -> "Live"
+            isConnecting -> "Connecting…"
+            else -> "Broadcast"
+        }
+
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_broadcast)
+            .setColor(0xFF2563EB.toInt())
             .setContentTitle(title)
-            .setContentText(text)
-            .setSubText("Live Broadcast")
+            .setContentText(contentText)
+            .setSubText(subText)
             .setContentIntent(contentPendingIntent)
             .setOngoing(true)
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setOnlyAlertOnce(true)
+            .setShowWhen(false)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .addAction(R.drawable.ic_stop, "Stop", stopPendingIntent)
             .build()
