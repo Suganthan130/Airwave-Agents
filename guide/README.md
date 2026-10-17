@@ -14,6 +14,15 @@ Welcome to the **Airwave Agents** guide directory! This collection of documents 
 
 ---
 
+## Testing Accounts
+
+| Role | Email | Password | Details |
+|---|---|---|---|
+| **Broadcaster** (Android) | `test@radiostreamhub.com` | `Test@147!` | Pre-configured with live Icecast station, 10 tracks, and broadcast stream. |
+| **Listener** (Web) | `listener@radiostreamhub.com` | `PublicTest@147!` | Pre-configured with UK profile (`United Kingdom` 🇬🇧). |
+
+---
+
 ## Quick Reference: Testing Song Requests
 
 ### 1. Song IN Library (Promote to Play Next)
