@@ -1,38 +1,59 @@
 # ProGuard / R8 Obfuscation & Shrinking Rules for Airwave Radio
 
-# 1. Essential Reflection Keep Rules
-# MainActivity reflectively invokes PrivateExperience.install() at runtime.
--keep class lk.sugaapps.airwave.PrivateExperience {
-    public static void install();
-    *;
-}
+# 1. Essential Reflection & Experience Keep Rules
+-keep class lk.sugaapps.airwave.PrivateExperience { *; }
+-keepclassmembers class lk.sugaapps.airwave.PrivateExperience { *; }
+-dontwarn lk.sugaapps.airwave.PrivateExperience
 
-# 2. Native C++ JNI & Audio Engine Keep Rules
-# Prevents stripping/renaming JNI entry points and callbacks used by Oboe & C++ engine.
+-keep class lk.sugaapps.airwave.ui.ExperienceRegistry { *; }
+-keepclassmembers class lk.sugaapps.airwave.ui.ExperienceRegistry { *; }
+
+# 2. Native C++ JNI & Proprietary Audio Streaming Engine
+# Preserves AudioStreamer, RealBroadcastEngine, C++ JNI methods and all callbacks.
+-keep class lk.sugastreamapps.broadcastmyself.** { *; }
+-keepclassmembers class lk.sugastreamapps.broadcastmyself.** { *; }
+-dontwarn lk.sugastreamapps.broadcastmyself.**
+
 -keepclasseswithmembernames class * {
     native <methods>;
 }
--keep class lk.sugaapps.airwave.engine.** { *; }
--keep class com.google.oboe.** { *; }
+-keepclasseswithmembers class * {
+    native <methods>;
+}
+-keepclassmembers class * {
+    public void onConnectionStateChanged(int, java.lang.String);
+    public void playFallbackPcm(short[]);
+}
 
-# 3. Data Models, Firestore, & Serialization
-# Keeps data models and fields used for Firestore document parsing and JSON serialization.
+-keep class lk.sugaapps.airwave.engine.** { *; }
+-keepclassmembers class lk.sugaapps.airwave.engine.** { *; }
+
+-keep class com.google.oboe.** { *; }
+-keepclassmembers class com.google.oboe.** { *; }
+
+# 3. Foreground Service & Audio Recording
+-keep class lk.sugaapps.airwave.service.** { *; }
+-keepclassmembers class lk.sugaapps.airwave.service.** { *; }
+
+# 4. Data Stores, Models, Firestore, & Serialization
 -keepattributes *Annotation*,Signature,InnerClasses,EnclosingMethod
+-keep class lk.sugaapps.airwave.data.** { *; }
+-keepclassmembers class lk.sugaapps.airwave.data.** { *; }
 -keepclassmembers class * {
     @com.google.firebase.firestore.** *;
 }
--keepclassmembers class lk.sugaapps.airwave.data.** {
-    <fields>;
-    <methods>;
-}
--keep class lk.sugaapps.airwave.data.StationChatMessage { *; }
--keep class lk.sugaapps.airwave.data.NewsItem { *; }
--keep class lk.sugaapps.airwave.engine.Playlist$Item { *; }
+-keep class com.google.firebase.** { *; }
+-dontwarn com.google.firebase.**
 
-# 4. Debugging & Stacktrace Preservation
-# Preserves line numbers for decoded crash reports and stacktraces via mapping.txt
+# 5. UI Screens & Components
+-keep class lk.sugaapps.airwave.ui.screens.** { *; }
+-keepclassmembers class lk.sugaapps.airwave.ui.screens.** { *; }
+-dontwarn lk.sugaapps.airwave.ui.screens.**
+
+# 6. Debugging & Stacktrace Preservation
 -keepattributes SourceFile,LineNumberTable
 -renamesourcefileattribute SourceFile
 
-# 5. Jetpack Compose
+# 7. Jetpack Compose & Coroutines
 -dontwarn androidx.compose.**
+-dontwarn kotlinx.coroutines.**
