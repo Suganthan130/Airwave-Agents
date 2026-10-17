@@ -249,7 +249,8 @@ fun HomeScreen(modifier: Modifier = Modifier) {
                 val curIdx = Playlist.currentIndex
                 if (curIdx in Playlist.items.indices && Playlist.items[curIdx].uri != savedUri) {
                     val finishedItem = Playlist.items[curIdx]
-                    ChatOnAirManager.markAsPlayedByTitle(context, finishedItem.title)
+                    finishedItem.sourceId?.let { ChatOnAirManager.markAsPlayed(context, it) }
+                        ?: ChatOnAirManager.markAsPlayedByTitle(context, finishedItem.title)
                     Playlist.remove(curIdx)
                 }
 
@@ -272,17 +273,17 @@ fun HomeScreen(modifier: Modifier = Modifier) {
                 // Track finished! Check if it was an AI RJ shoutout or time check
                 val curIdx = Playlist.currentIndex
                 val finishedItem = if (curIdx in Playlist.items.indices) Playlist.items[curIdx] else null
-                val isAiClip = finishedItem?.let {
-                    it.title.startsWith("💬") ||
-                    it.title.startsWith("Flash News") ||
-                    it.artist.contains("Listener On-Air") ||
-                    it.artist.contains("Co-Host")
-                } == true
+                // Authoritative: any AI-generated clip (shoutout, song-request shout,
+                // flash news, time check) is flagged isAi via its rj_* uri, or carries a
+                // sourceId. The old title-prefix check missed "🎵 Song Request" clips, so
+                // they were never removed and lingered in the queue.
+                val isAiClip = finishedItem?.let { it.isAi || it.sourceId != null } == true
 
                 if (isAiClip) {
                     val item = finishedItem!!
                     // Mark as played and remove from playlist so it doesn't replay, then seamlessly proceed to next song!
-                    ChatOnAirManager.markAsPlayedByTitle(context, item.title)
+                    item.sourceId?.let { ChatOnAirManager.markAsPlayed(context, it) }
+                        ?: ChatOnAirManager.markAsPlayedByTitle(context, item.title)
                     Playlist.remove(curIdx)
                     if (Playlist.currentIndex in Playlist.items.indices) {
                         Playlist.play(Playlist.currentIndex, engine, context)
@@ -665,7 +666,9 @@ private fun BroadcastContent(
         if (granted) {
             BroadcastForegroundService.start(context)
             engine.startBroadcast()
-            playCurrentTrack()
+            // Music starts once the stream is actually connected — see the
+            // LaunchedEffect(connState == 1) below — so we don't broadcast into a
+            // not-yet-open socket.
         }
         else toast("Microphone permission is required to broadcast.")
     }
@@ -686,7 +689,7 @@ private fun BroadcastContent(
             else -> {
                 BroadcastForegroundService.start(context)
                 engine.startBroadcast()
-                playCurrentTrack()
+                // Playback is deferred until connectionState == 1 (see LaunchedEffect below).
                 AuthRepository.currentUser?.uid?.let { uid ->
                     scope.launch {
                         val tracks = Playlist.musicTracks.map {
@@ -729,12 +732,14 @@ private fun BroadcastContent(
         }
     }
 
-    // Keep live broadcast active when screen is locked or app is backgrounded
+    // Keep the foreground service alive while connecting or live so the broadcast
+    // survives screen-lock / backgrounding. We do NOT stop it on the disconnected
+    // state here: that state is also the initial and the transient (reconnecting)
+    // state, and stopping the service then would kill the stream before/while it
+    // connects. The service stops itself on a sustained drop and on the user's Stop.
     LaunchedEffect(connState) {
         if (connState == 0 || connState == 1) {
             BroadcastForegroundService.start(context)
-        } else if (connState == 2) {
-            BroadcastForegroundService.stop(context)
         }
     }
 
@@ -780,41 +785,66 @@ private fun BroadcastContent(
     LaunchedEffect(user?.uid) {
         val u = user ?: return@LaunchedEffect
         runCatching {
-            // Load custom stream settings if previously saved in Cloud Firestore
-            val userSettings = withTimeoutOrNull(5000) { UserStore.loadSettings(u.uid) }
-            if (userSettings != null) {
-                (userSettings["host"] as? String)?.takeIf { it.isNotBlank() }?.let { StreamConfig.host = it }
-                (userSettings["port"] as? String)?.toIntOrNull()?.let { StreamConfig.port = it }
-                (userSettings["mount"] as? String)?.takeIf { it.isNotBlank() }?.let { StreamConfig.mount = it }
-                (userSettings["username"] as? String)?.takeIf { it.isNotBlank() }?.let { StreamConfig.user = it }
-                (userSettings["password"] as? String)?.takeIf { it.isNotBlank() }?.let { StreamConfig.password = it }
-                (userSettings["bitrate"] as? Number)?.let { StreamConfig.bitrate = intArrayOf(64, 128, 192, 320).getOrElse(it.toInt()) { 128 } }
-                (userSettings["sampleRate"] as? Number)?.let { StreamConfig.sampleRate = if (it.toInt() == 1) 48000 else 44100 }
-                (userSettings["channels"] as? Number)?.let { StreamConfig.channels = if (it.toInt() == 0) 1 else 2 }
-                (userSettings["autoReconnect"] as? Boolean)?.let { StreamConfig.autoReconnect = it }
-                (userSettings["rjVoice"] as? Number)?.let { RjConfig.voiceIndex = it.toInt() }
-                (userSettings["rjSpeed"] as? Number)?.let { RjConfig.speedIndex = it.toInt() }
-                (userSettings["autoTimeInterval"] as? Number)?.let { RjConfig.autoTimeIntervalIndex = it.toInt() }
+            // Load custom stream settings directly from Cloud Firestore (always server-authoritative)
+            val userSettings = withTimeoutOrNull(8000) { UserStore.loadSettings(u.uid) }
+            val station = withTimeoutOrNull(8000) { StationManager.getStation(u.uid) }
+
+            val serverTypeRaw = (userSettings?.get("serverType") ?: station?.get("serverType"))?.toString() ?: ""
+            val serverTypeNum = if (serverTypeRaw == "1" || serverTypeRaw.contains("Shoutcast", ignoreCase = true)) 1 else 0
+            val serverType = if (serverTypeNum == 1) "Shoutcast" else "Icecast 2"
+
+            val effectiveHost = userSettings?.get("host")?.toString()?.takeIf { it.isNotBlank() }
+                ?: station?.get("host")?.toString()?.takeIf { it.isNotBlank() }
+            val effectivePort = userSettings?.get("port")?.toString()?.takeIf { it.isNotBlank() }
+                ?: station?.get("port")?.toString()?.takeIf { it.isNotBlank() }
+            val effectiveMount = userSettings?.get("mount")?.toString()?.takeIf { it.isNotBlank() }
+                ?: station?.get("mount")?.toString()?.takeIf { it.isNotBlank() }
+            val effectiveUsername = userSettings?.get("username")?.toString()?.takeIf { it.isNotBlank() }
+            val effectivePassword = userSettings?.get("password")?.toString()?.takeIf { it.isNotBlank() }
+
+            if (effectiveHost != null) StreamConfig.host = effectiveHost
+            if (effectivePort != null) effectivePort.toIntOrNull()?.let { StreamConfig.port = it }
+            if (effectiveMount != null) StreamConfig.mount = effectiveMount
+            if (effectiveUsername != null) StreamConfig.user = effectiveUsername
+            if (effectivePassword != null) StreamConfig.password = effectivePassword
+            StreamConfig.serverType = serverTypeNum
+
+            userSettings?.let {
+                (it["bitrate"] as? Number)?.let { StreamConfig.bitrate = intArrayOf(64, 128, 192, 320).getOrElse(it.toInt()) { 128 } }
+                (it["sampleRate"] as? Number)?.let { StreamConfig.sampleRate = if (it.toInt() == 1) 48000 else 44100 }
+                (it["channels"] as? Number)?.let { StreamConfig.channels = if (it.toInt() == 0) 1 else 2 }
+                (it["autoReconnect"] as? Boolean)?.let { StreamConfig.autoReconnect = it }
+                (it["autoTimeInterval"] as? Number)?.let { RjConfig.autoTimeIntervalIndex = it.toInt() }
+
+                val voiceStr = (it["voice"] as? String)
+                if (voiceStr != null) {
+                    RjConfig.voiceIndex = RjConfig.voiceCodeToIndex(voiceStr)
+                } else {
+                    (it["rjVoice"] as? Number)?.let { RjConfig.voiceIndex = it.toInt() }
+                }
+
+                val rateNum = (it["speakingRate"] as? Number)?.toFloat()
+                if (rateNum != null) {
+                    RjConfig.speedIndex = RjConfig.speakingRateToIndex(rateNum)
+                } else {
+                    (it["rjSpeed"] as? Number)?.let { RjConfig.speedIndex = it.toInt() }
+                }
+            }
+
+            val stationDocUrl = (station?.get("streamUrl") as? String)
+                ?: (station?.get("publicListeningUrl") as? String)
+            val userSettingsUrl = (userSettings?.get("streamUrl") as? String)
+                ?: (userSettings?.get("publicListeningUrl") as? String)
+            val configUrl = StreamConfig.publicListeningUrl
+
+            val existingPublicUrl = listOfNotNull(userSettingsUrl, stationDocUrl, configUrl)
+                .firstOrNull { StationManager.isValidPublicStreamUrl(it) }
+
+            if (existingPublicUrl.isNullOrBlank()) {
+                publicListeningInput = ""
+                showPublicListeningPrompt = true
             } else {
-                // Keep Icecast details on Firestore if this broadcaster has not saved them yet
-                UserStore.saveSettings(
-                    u.uid,
-                    mapOf(
-                        "host" to StreamConfig.host,
-                        "port" to StreamConfig.port.toString(),
-                        "mount" to StreamConfig.mount,
-                        "username" to StreamConfig.user,
-                        "password" to StreamConfig.password,
-                        "bitrate" to when (StreamConfig.bitrate) { 64 -> 0; 192 -> 2; 320 -> 3; else -> 1 },
-                        "sampleRate" to (if (StreamConfig.sampleRate == 48000) 1 else 0),
-                        "channels" to (if (StreamConfig.channels == 1) 0 else 1),
-                        "autoReconnect" to StreamConfig.autoReconnect,
-                        "publicListeningUrl" to StreamConfig.publicListeningUrl,
-                        "rjVoice" to RjConfig.voiceIndex,
-                        "rjSpeed" to RjConfig.speedIndex,
-                        "autoTimeInterval" to RjConfig.autoTimeIntervalIndex,
-                    )
-                )
+                StreamConfig.publicListeningUrl = existingPublicUrl
             }
 
             // Sync updated values to local SharedPreferences so they persist offline and across restarts
@@ -822,6 +852,7 @@ private fun BroadcastContent(
             SettingsStore.save(
                 context,
                 localState.copy(
+                    serverType = serverTypeNum,
                     host = StreamConfig.host,
                     port = StreamConfig.port.toString(),
                     mount = StreamConfig.mount,
@@ -831,32 +862,9 @@ private fun BroadcastContent(
                     rjVoice = RjConfig.voiceIndex,
                     rjSpeed = RjConfig.speedIndex,
                     autoTimeInterval = RjConfig.autoTimeIntervalIndex,
+                    publicListeningUrl = StreamConfig.publicListeningUrl,
                 ),
             )
-
-            val station = StationManager.getStation(u.uid)
-            val stationDocUrl = (station?.get("publicListeningUrl") as? String)
-                ?: (station?.get("streamUrl") as? String)
-            val userSettingsUrl = (userSettings?.get("publicListeningUrl") as? String)
-            val configUrl = StreamConfig.publicListeningUrl
-
-            val existingPublicUrl = listOfNotNull(stationDocUrl, userSettingsUrl, configUrl)
-                .firstOrNull { StationManager.isValidPublicStreamUrl(it) }
-
-            if (existingPublicUrl.isNullOrBlank()) {
-                publicListeningInput = ""
-                showPublicListeningPrompt = true
-            } else {
-                StreamConfig.publicListeningUrl = existingPublicUrl
-                val current = SettingsStore.load(context)
-                if (current.publicListeningUrl != existingPublicUrl) {
-                    SettingsStore.save(context, current.copy(publicListeningUrl = existingPublicUrl))
-                }
-            }
-
-            val serverTypeNum = (userSettings?.get("serverType") as? Number)?.toInt() ?: 0
-            val serverType = if (serverTypeNum == 1) "Shoutcast" else "Icecast 2"
-
             StationManager.registerOrUpdateStation(
                 uid = u.uid,
                 broadcasterName = u.displayName?.takeIf { it.isNotBlank() } ?: u.email?.substringBefore("@") ?: "Broadcaster",
@@ -936,7 +944,7 @@ private fun BroadcastContent(
                             if (trimmed.isNotBlank()) {
                                 scope.launch {
                                     StationManager.savePublicListeningUrl(u.uid, trimmed)
-                                    UserStore.saveSettings(u.uid, mapOf("publicListeningUrl" to trimmed))
+                                    UserStore.saveSettings(u.uid, mapOf("streamUrl" to trimmed))
                                     StreamConfig.publicListeningUrl = trimmed
                                     val currentSettings = SettingsStore.load(context)
                                     SettingsStore.save(context, currentSettings.copy(publicListeningUrl = trimmed))
@@ -967,7 +975,10 @@ private fun BroadcastContent(
             confirmButton = {
                 TextButton(onClick = {
                     showStopConfirm = false
+                    isPlaying = false
+                    engine.setMusicPlaying(false)
                     engine.stopBroadcast()
+                    BroadcastForegroundService.stop(context)
                 }) {
                     Text("Stop broadcast", color = DangerRed, fontWeight = FontWeight.SemiBold)
                 }
@@ -1354,6 +1365,47 @@ private fun BroadcastContent(
                     Text(displayArtist, style = MaterialTheme.typography.bodyMedium, color = TextSecondary, maxLines = 1)
                 }
             }
+
+            // Quick test-song loader: shown only when the library has no music tracks yet,
+            // so a broadcaster can get on air immediately without leaving Home.
+            if (Playlist.musicTracks.isEmpty()) {
+                var loadingTestSongs by remember { mutableStateOf(false) }
+                Spacer(Modifier.height(12.dp))
+                Button(
+                    onClick = {
+                        if (loadingTestSongs) return@Button
+                        loadingTestSongs = true
+                        scope.launch(Dispatchers.IO) {
+                            val count = runCatching {
+                                Playlist.loadDefaultTracksFromAssets(context, force = false)
+                            }.getOrNull()
+                            withContext(Dispatchers.Main) {
+                                loadingTestSongs = false
+                                when {
+                                    count == null -> toast("Couldn't load test songs. Please try again.")
+                                    count > 0 -> toast("Loaded $count test songs to Library")
+                                    else -> toast("Test songs already loaded")
+                                }
+                            }
+                        }
+                    },
+                    enabled = !loadingTestSongs,
+                    modifier = Modifier.fillMaxWidth().height(44.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = BrandBlue, contentColor = Color.White),
+                ) {
+                    if (loadingTestSongs) {
+                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = Color.White)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Loading…", fontWeight = FontWeight.SemiBold)
+                    } else {
+                        Icon(painterResource(R.drawable.ic_tracks), contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Load Test Songs", fontWeight = FontWeight.SemiBold)
+                    }
+                }
+            }
+
             Spacer(Modifier.height(12.dp))
             Slider(
                 value = seek,
@@ -1673,6 +1725,7 @@ private fun BroadcastContent(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Row(
+                    modifier = Modifier.weight(1f),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
@@ -1685,33 +1738,70 @@ private fun BroadcastContent(
                     ) {
                         Icon(painterResource(R.drawable.ic_chat), contentDescription = null, tint = BrandBlue, modifier = Modifier.size(20.dp))
                     }
-                    Column {
+                    Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = "Listener Feed",
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.Bold,
                             color = TextPrimary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                         )
                         Text(
                             text = "Spoken by Gemini RJ at each song end",
                             style = MaterialTheme.typography.labelSmall,
                             color = TextMuted,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                         )
                     }
                 }
 
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(if (chatMessages.isNotEmpty()) BrandBlue.copy(alpha = 0.1f) else SurfaceMuted)
-                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                Spacer(Modifier.width(8.dp))
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    Text(
-                        text = if (chatMessages.isNotEmpty()) "${chatMessages.size} Messages" else "0 Messages",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = if (chatMessages.isNotEmpty()) BrandBlue else TextMuted,
-                    )
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(SurfaceMuted)
+                            .clickable {
+                                val uid = user?.uid
+                                if (uid.isNullOrBlank()) {
+                                    toast("Sign in to load listener messages.")
+                                } else {
+                                    ChatOnAirManager.refresh(context, uid, scope)
+                                    toast("Refreshing listener feed…")
+                                }
+                            }
+                            .padding(6.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            painterResource(R.drawable.ic_refresh),
+                            contentDescription = "Refresh listener feed",
+                            tint = BrandBlue,
+                            modifier = Modifier.size(18.dp),
+                        )
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(if (chatMessages.isNotEmpty()) BrandBlue.copy(alpha = 0.1f) else SurfaceMuted)
+                            .padding(horizontal = 8.dp, vertical = 4.dp),
+                    ) {
+                        Text(
+                            text = if (chatMessages.isNotEmpty()) "${chatMessages.size} Messages" else "0 Messages",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = if (chatMessages.isNotEmpty()) BrandBlue else TextMuted,
+                            maxLines = 1,
+                            softWrap = false,
+                        )
+                    }
                 }
             }
 
@@ -1805,34 +1895,6 @@ private fun BroadcastContent(
                         style = MaterialTheme.typography.bodyLarge,
                         color = TextPrimary,
                     )
-                    if (idx > 0) {
-                        Text(
-                            text = "↑ Move up in order",
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    Playlist.moveUp(idx)
-                                    queueDialogFor = null
-                                }
-                                .padding(vertical = 12.dp),
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = TextPrimary,
-                        )
-                    }
-                    if (idx < Playlist.items.size - 1) {
-                        Text(
-                            text = "↓ Move down in order",
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    Playlist.moveDown(idx)
-                                    queueDialogFor = null
-                                }
-                                .padding(vertical = 12.dp),
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = TextPrimary,
-                        )
-                    }
                     Text(
                         text = "✕ Remove from queue",
                         modifier = Modifier
