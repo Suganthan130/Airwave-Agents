@@ -1,11 +1,11 @@
-"""Gemini 2.5 Flash on Vertex AI for Radio Co-Host intelligence."""
+"""Gemini 3 Flash on Vertex AI for Radio Co-Host intelligence."""
 
 import json
 import logging
 import re
 import vertexai
 from vertexai.generative_models import GenerativeModel, GenerationConfig
-from airwave_agents.core.config import PROJECT_ID, LOCATION, detect_script_language
+from airwave_agents.core.config import PROJECT_ID, LOCATION, GEMINI_MODEL, detect_script_language
 
 logger = logging.getLogger(__name__)
 
@@ -80,22 +80,28 @@ async def generate_rj_text(type_name: str, ctx: dict) -> str:
     else:
         task = "Say a short, friendly on-air line."
 
-    try:
-        model = GenerativeModel("gemini-2.5-flash")
-        config = GenerationConfig(
-            max_output_tokens=2048,
-            temperature=0.7 if is_news else 0.9,
-        )
-        response = model.generate_content(
-            f"{persona}\n\nTask: {task}",
-            generation_config=config,
-        )
-        text = response.text.strip() if response and response.text else ""
-        if text:
-            # Clean quotes and asterisks
-            return re.sub(r'["#*]', "", text)[:1000]
-    except Exception as e:
-        logger.warning(f"Gemini generate_rj_text error: {e}. Using fallback.")
+    models_to_try = [GEMINI_MODEL]
+    for m in ("gemini-2.5-flash", "gemini-2.5-pro"):
+        if m not in models_to_try:
+            models_to_try.append(m)
+
+    for candidate_name in models_to_try:
+        try:
+            model = GenerativeModel(candidate_name)
+            config = GenerationConfig(
+                max_output_tokens=2048,
+                temperature=0.7 if is_news else 0.9,
+            )
+            response = model.generate_content(
+                f"{persona}\n\nTask: {task}",
+                generation_config=config,
+            )
+            text = response.text.strip() if response and response.text else ""
+            if text:
+                # Clean quotes and asterisks
+                return re.sub(r'["#*]', "", text)[:1000]
+        except Exception as e:
+            logger.warning(f"Gemini generate_rj_text error with {candidate_name}: {e}. Trying next if available.")
 
     # Fallbacks
     if is_news:
@@ -197,16 +203,25 @@ async def generate_rj_chat_reply(
         f"     * Example (Tamil): \"ரொம்ப நன்றி {user_name or 'நண்பரே'}! மன்னிக்கவும், இப்போதைக்கு நம்ம playlist-ல '[Song Title]' பாடல் இல்லை, ஆனா கண்டிப்பா நாளைக்கு இந்த பாட்டை நான் add பண்றேன்! தொடர்ந்து இணைந்திருங்கள், கேட்டதற்கு மிக்க நன்றி!\"\n"
         f"   - IF IT IS NOT A SONG REQUEST:\n"
         f"     * Set: \"isSongRequest\": false, \"songFound\": false, \"requestedSongTitle\": \"\"\n"
-        f"4. DELIVER CREATIVE REQUESTS IMMEDIATELY ON-AIR (NEVER POSTPONE TO 'NEXT TIME'):\n"
+        f"4. ON-AIR SHOUTOUTS, BIRTHDAYS, ANNIVERSARIES, CELEBRATIONS & DEDICATIONS:\n"
+        f"   - Check if the listener is asking for a shoutout, birthday wish, anniversary, celebration, congratulations, graduation, or personal dedication (e.g. 'It\'s my best friend Kevin\'s 25th birthday today! Can you give him a big birthday shoutout?', 'happy birthday to my sister', 'anniversary dedication', etc.).\n"
+        f"   - IF YES:\n"
+        f"     * Set: \"isSongRequest\": false, \"songFound\": false, \"requestedSongTitle\": \"\"\n"
+        f"     * In \"replyText\": Deliver an electrifying, heartfelt, personalized on-air celebration!\n"
+        f"     * Warmly acknowledge the listener who sent it ({user_name or 'our listener'} from {user_country or 'our radio community'}), give a massive, high-energy shoutout to the person being celebrated (e.g. Kevin), mention their milestone (e.g. turning 25!), and send warmest radio vibes and love!\n"
+        f"     * Example (English): \"Laxshana from the United Kingdom, thank you for tuning in to Airwave Agents! A massive, epic 25th birthday shoutout goes out to your best friend Kevin! Kevin, from all of us here at Airwave Agents, have the most spectacular birthday ever!\"\n"
+        f"     * Example (Tamil): \"வணக்கம் {user_name or 'நண்பரே'}! உங்க அன்பு நண்பர் கெவினுக்கு நம்ம Airwave Agents சார்பாக இனிய 25-வது பிறந்தநாள் நல்வாழ்த்துகள்! இந்த நாள் இனிதாக அமையட்டும்!\"\n"
+        f"     * NEVER give a canned greeting — make them feel like live radio stars!\n"
+        f"5. DELIVER CREATIVE REQUESTS IMMEDIATELY ON-AIR (NEVER POSTPONE TO 'NEXT TIME'):\n"
         f"   - If the listener asks for a poem (kavithai / கவிதை / shayari / poem), a short story (கதை / kahani / story), a joke, a riddle, a proverb, thoughts on rain/love/friendship/life, or ANY creative request:\n"
         f"     * RECITE OR TELL IT RIGHT NOW in this on-air reply!\n"
         f"     * Compose a beautiful, heartwarming, rhyming poem or short story right here on the spot and deliver it on-air with soulful, charismatic energy!\n"
-        f"5. ANSWER WHAT THE LISTENER SPECIFICALLY ASKED — NEVER GIVE A GENERIC TEMPLATE:\n"
-        f"   - Directly and specifically answer the exact question or comment the listener asked.\n"
-        f"   - Greet them warmly by name and country, then deliver the answer / poem / story immediately.\n"
-        f"   - 2 to 4 natural, conversational, punchy radio sentences.\n"
+        f"6. ANSWER WHAT THE LISTENER SPECIFICALLY ASKED — NEVER GIVE A GENERIC TEMPLATE:\n"
+        f"   - Directly and specifically answer the exact question, shoutout, or comment the listener asked.\n"
+        f"   - Greet them warmly by name and country, then deliver the answer / shoutout / poem / story immediately.\n"
+        f"   - 2 to 4 natural, conversational, punchy radio sentences with vibrant FM radio energy.\n"
         f"   - Plain spoken broadcast text only — do not include sound effect labels in brackets, emojis, hashtags, or asterisks.\n"
-        f"6. Return JSON ONLY with this exact schema:\n"
+        f"7. Return JSON ONLY with this exact schema:\n"
         f"{{\n"
         f'  "skipped": false,\n'
         f'  "isSongRequest": false,\n'
@@ -218,31 +233,44 @@ async def generate_rj_chat_reply(
         f"}}"
     )
 
-    try:
-        model = GenerativeModel("gemini-2.5-flash")
-        config = GenerationConfig(
-            max_output_tokens=4096,
-            temperature=0.7,
-            response_mime_type="application/json",
-        )
-        response = model.generate_content(prompt, generation_config=config)
-        raw = response.text.strip() if response and response.text else ""
+    models_to_try = [GEMINI_MODEL]
+    for m in ("gemini-2.5-flash", "gemini-2.5-pro"):
+        if m not in models_to_try:
+            models_to_try.append(m)
 
-        logger.info(f"Gemini chat raw response: {raw[:200]}...")
-        parsed = None
+    raw = ""
+    for candidate_name in models_to_try:
         try:
-            parsed = json.loads(raw, strict=False)
-        except Exception:
-            clean_raw = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw.strip(), flags=re.MULTILINE)
+            model = GenerativeModel(candidate_name)
+            config = GenerationConfig(
+                max_output_tokens=4096,
+                temperature=0.7,
+                response_mime_type="application/json",
+            )
+            response = model.generate_content(prompt, generation_config=config)
+            raw = response.text.strip() if response and response.text else ""
+            if raw:
+                logger.info(f"Gemini chat success with model {candidate_name}: {raw[:150]}...")
+                break
+        except Exception as e:
+            logger.warning(f"Gemini generate_rj_chat_reply error with {candidate_name}: {e}. Trying next if available.")
+
+    try:
+        parsed = None
+        if raw:
             try:
-                parsed = json.loads(clean_raw, strict=False)
+                parsed = json.loads(raw, strict=False)
             except Exception:
-                match = re.search(r"\{[\s\S]*\}", raw)
-                if match:
-                    try:
-                        parsed = json.loads(match.group(0), strict=False)
-                    except Exception:
-                        pass
+                clean_raw = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw.strip(), flags=re.MULTILINE)
+                try:
+                    parsed = json.loads(clean_raw, strict=False)
+                except Exception:
+                    match = re.search(r"\{[\s\S]*\}", raw)
+                    if match:
+                        try:
+                            parsed = json.loads(match.group(0), strict=False)
+                        except Exception:
+                            pass
 
         if parsed:
             is_skipped = parsed.get("skipped") is True or str(parsed.get("replyText", "")).strip().upper() == "SKIP"
@@ -270,45 +298,70 @@ async def generate_rj_chat_reply(
                 }
 
         # Resilient regex fallback for multiline poems/stories inside replyText JSON
-        reply_match = re.search(r'"replyText"\s*:\s*"([\s\S]*?)(?:"\s*\}|",\s*"\w+":)', raw)
-        if reply_match:
-            reply = re.sub(r'["#*]', "", reply_match.group(1)).replace("\\n", "\n").replace('\\"', '"')[:1000].strip()
-            if reply and reply.upper() != "SKIP":
-                script = detect_script_language(reply) or "en-US"
-                req_match = re.search(r'"requestedSongTitle"\s*:\s*"([^"]+)"', raw)
-                is_req = '"isSongRequest": true' in raw or '"isSongRequest":true' in raw
-                found = '"songFound": true' in raw or '"songFound":true' in raw
+        if raw:
+            reply_match = re.search(r'"replyText"\s*:\s*"([\s\S]*?)(?:"\s*\}|",\s*"\w+":)', raw)
+            if reply_match:
+                reply = re.sub(r'["#*]', "", reply_match.group(1)).replace("\\n", "\n").replace('\\"', '"')[:1000].strip()
+                if reply and reply.upper() != "SKIP":
+                    script = detect_script_language(reply) or "en-US"
+                    req_match = re.search(r'"requestedSongTitle"\s*:\s*"([^"]+)"', raw)
+                    is_req = '"isSongRequest": true' in raw or '"isSongRequest":true' in raw
+                    found = '"songFound": true' in raw or '"songFound":true' in raw
+                    return {
+                        "skipped": False,
+                        "text": reply,
+                        "languageCode": script,
+                        "languageName": "Detected",
+                        "isSongRequest": is_req,
+                        "songFound": found,
+                        "requestedSongTitle": req_match.group(1) if req_match else "",
+                    }
+
+            if raw.strip().upper() == "SKIP":
+                return {"skipped": True, "text": "", "languageCode": "en-US", "languageName": "English"}
+
+            clean = re.sub(r'["#*]', "", raw)[:1000].strip()
+            if clean:
+                script = detect_script_language(clean) or "en-US"
                 return {
                     "skipped": False,
-                    "text": reply,
+                    "text": clean,
                     "languageCode": script,
                     "languageName": "Detected",
-                    "isSongRequest": is_req,
-                    "songFound": found,
-                    "requestedSongTitle": req_match.group(1) if req_match else "",
                 }
 
-        if raw.strip().upper() == "SKIP":
-            return {"skipped": True, "text": "", "languageCode": "en-US", "languageName": "English"}
-
-        clean = re.sub(r'["#*]', "", raw)[:1000].strip()
-        script = detect_script_language(clean) or "en-US"
-        return {
-            "skipped": False,
-            "text": clean,
-            "languageCode": script,
-            "languageName": "Detected",
-        }
-
     except Exception as e:
-        logger.warning(f"Gemini generate_rj_chat_reply error: {e}. Using language-aware fallback.")
+        logger.warning(f"Error parsing Gemini response: {e}. Using language-aware fallback.")
 
-    # Multilingual Fallbacks
+    # Multilingual & Context-Aware Fallbacks (Never a single canned response)
     script = detect_script_language(message_text)
     is_tamil = script == "ta-IN" or bool(re.search(r"tamil|pesuvingala|saputingala|erukingala|vanakkam|sugam", message_text, re.I))
+    lower_text = (message_text or "").lower()
+
+    is_bday_shoutout = any(k in lower_text for k in ("birthday", "bday", "shoutout", "shout out", "congrat", "anniversary", "celebrat", "turning", "wish"))
+    if is_bday_shoutout:
+        if is_tamil:
+            return {
+                "skipped": False,
+                "text": f"வணக்கம் {user_name or 'நண்பரே'}! உங்கள் அன்புச் செய்திக்கு மிக்க நன்றி! கொண்டாட்டங்கள் மற்றும் பிறந்தநாள் கொண்டாடும் உங்கள் அன்புக்குரியவர்களுக்கு Airwave Agents சார்பாக மனமார்ந்த வாழ்த்துகள்!",
+                "languageCode": "ta-IN",
+                "languageName": "Tamil",
+                "isSongRequest": False,
+                "songFound": False,
+                "requestedSongTitle": "",
+            }
+        return {
+            "skipped": False,
+            "text": f"A huge on-air birthday shoutout and big radio love from {user_name or 'our listener'} in {user_country or 'the studio'}! Wishing you an incredible celebration filled with happiness, wonderful vibes, and great music on Airwave Agents!",
+            "languageCode": "en-US",
+            "languageName": "English",
+            "isSongRequest": False,
+            "songFound": False,
+            "requestedSongTitle": "",
+        }
 
     if is_tamil:
-        tamil_msg = f"வணக்கம் {user_name or 'நண்பரே'}! ஆமாங்க, நான் கண்டிப்பா தமிழ் பேசுவேன்! "
+        tamil_msg = f"வணக்கம் {user_name or 'நண்பரே'}! உங்கள் அன்பான செய்திக்கு மிக்க நன்றி! "
         if next_track:
             tamil_msg += f"அடுத்ததா உங்களுக்காக {next_track} பாடல் ஒலிக்கப்போகிறது, கேட்டு மகிழுங்கள்!"
         else:
@@ -318,19 +371,28 @@ async def generate_rj_chat_reply(
             "text": tamil_msg,
             "languageCode": "ta-IN",
             "languageName": "Tamil",
+            "isSongRequest": False,
+            "songFound": False,
+            "requestedSongTitle": "",
         }
 
     if script == "hi-IN" or bool(re.search(r"hindi|namaste|kaisa", message_text, re.I)):
         return {
             "skipped": False,
-            "text": f"नमस्ते {user_name or 'दोस्त'}! आपके प्यारे संदेश के लिए बहुत धन्यवाद, मैं बिल्कुल ठीक हूँ! Airwave Agents पर शानदार संगीत सुनते रहिए!",
+            "text": f"नमस्ते {user_name or 'दोस्त'}! आपके प्यारे संदेश के लिए बहुत धन्यवाद! Airwave Agents पर शानदार संगीत सुनते रहिए!",
             "languageCode": "hi-IN",
             "languageName": "Hindi",
+            "isSongRequest": False,
+            "songFound": False,
+            "requestedSongTitle": "",
         }
 
     return {
         "skipped": False,
-        "text": f"Hello {user_name or 'friend'} from {user_country or 'around the world'}! Thanks so much for reaching out, we're doing great and loving the music with you on Airwave Agents!",
+        "text": f"Hey {user_name or 'friend'} from {user_country or 'around the world'}! Thanks so much for sending in that message, we are having a blast with you tuning in to Airwave Agents!",
         "languageCode": "en-US",
         "languageName": "English",
+        "isSongRequest": False,
+        "songFound": False,
+        "requestedSongTitle": "",
     }
