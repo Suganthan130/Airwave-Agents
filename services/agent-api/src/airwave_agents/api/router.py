@@ -10,16 +10,19 @@ from airwave_agents.models.requests import (
     ChatReplyRequest,
     ProcessMessageRequest,
     FlashNewsRequest,
+    NewsFeedRequest,
 )
 from airwave_agents.models.responses import (
     RjLineResponse,
     SynthesizeResponse,
     ChatReplyResponse,
     ProcessMessageResponse,
+    NewsFeedResponse,
 )
 from airwave_agents.services.gemini import generate_rj_text, generate_rj_chat_reply
 from airwave_agents.services.tts import synthesize_mp3
 from airwave_agents.services.chat import process_one_message
+from airwave_agents.services.news_feed import fetch_hiru_news
 
 logger = logging.getLogger(__name__)
 
@@ -213,3 +216,19 @@ async def create_flash_news(req: FlashNewsRequest):
     except Exception as e:
         logger.error(f"Error in flash-news: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Flash news creation failed: {str(e)}")
+
+
+@router.post("/news-feed", response_model=NewsFeedResponse, dependencies=[Depends(get_optional_user)])
+async def get_news_feed(req: NewsFeedRequest = NewsFeedRequest()):
+    """Fetches the latest real Sri Lankan news stories from Hiru News for the News Studio."""
+    limit = req.limit or 24
+    try:
+        items = await fetch_hiru_news(limit=limit)
+        if not items:
+            raise HTTPException(status_code=502, detail="No news stories available from Hiru right now.")
+        return NewsFeedResponse(source="Hiru News", count=len(items), items=items)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in news-feed: {e}", exc_info=True)
+        raise HTTPException(status_code=502, detail=f"News feed fetch failed: {str(e)}")

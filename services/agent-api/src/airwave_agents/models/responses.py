@@ -1,6 +1,6 @@
 """Pydantic models for API responses."""
 
-from typing import Optional
+from typing import List, Optional
 from pydantic import BaseModel
 
 
@@ -36,3 +36,19 @@ class ProcessMessageResponse(BaseModel):
     isSongRequest: Optional[bool] = False
     songFound: Optional[bool] = False
     requestedSongTitle: Optional[str] = None
+
+
+class NewsFeedItem(BaseModel):
+    id: str
+    title: str
+    description: str = ""
+    category: str = "World"
+    published: str = ""
+    order: int = 0
+    link: str = ""
+
+
+class NewsFeedResponse(BaseModel):
+    source: str = "Hiru News"
+    count: int = 0
+    items: List[NewsFeedItem] = []

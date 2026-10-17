@@ -612,7 +612,7 @@ fun AiStudioScreen(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(
-                            text = "News Feed: Live (Cloud Firestore)",
+                            text = "News Feed: Live · Hiru News",
                             style = MaterialTheme.typography.labelSmall,
                             color = OnAirTeal,
                             fontWeight = FontWeight.Medium,
@@ -656,7 +656,7 @@ fun AiStudioScreen(
                         scope.launch {
                             try {
                                 NewsManager.refresh(context)
-                                toast("News feed refreshed from Cloud Firestore")
+                                toast("News feed refreshed from Hiru News")
                             } catch (e: Exception) {
                                 toast("Refresh failed: ${e.message ?: "Network error"}")
                             }
@@ -686,7 +686,7 @@ fun AiStudioScreen(
                         if (isRefreshing) {
                             CircularProgressIndicator(modifier = Modifier.size(28.dp), color = BrandBlue)
                             Spacer(Modifier.height(12.dp))
-                            Text("Connecting to Cloud Firestore news feed…", color = TextSecondary)
+                            Text("Fetching the latest Hiru News…", color = TextSecondary)
                         } else {
                             Text("No news loaded yet.", color = TextSecondary)
                             Spacer(Modifier.height(8.dp))
