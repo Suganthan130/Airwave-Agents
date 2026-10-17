@@ -52,6 +52,9 @@ object Playlist {
         val durationMs: Long,
         val isAi: Boolean = isAiContent(title, artist, uri.toString()),
         val isAiMoved: Boolean = false,
+        // For AI shoutout clips: the listener chat message this clip came from, so its
+        // on-air state can be tracked by exact id instead of fuzzy title matching.
+        val sourceId: String? = null,
     )
 
     val items = mutableStateListOf<Item>()
@@ -309,37 +312,50 @@ object Playlist {
         save()
     }
 
-    /** Add [item] and move it to play right after the current track. */
+    /**
+     * Insertion index for a "play next" item, honoring on-air priority:
+     *  - the current song stays put;
+     *  - AI clips (news / time / messages / song-request shouts) form a FIFO block
+     *    right after the current song — a new clip goes after the ones already waiting,
+     *    so the first received airs first;
+     *  - a user-picked song goes AFTER that whole priority block (AI clips + bumped
+     *    song requests), so it never jumps ahead of pending news/time/messages.
+     */
+    private fun priorityInsertPos(itemIsAi: Boolean): Int {
+        var pos = (currentIndex + 1).coerceIn(0, items.size)
+        while (pos < items.size) {
+            val it = items[pos]
+            val skip = if (itemIsAi) it.isAi else (it.isAi || it.isAiMoved)
+            if (!skip) break
+            pos++
+        }
+        return pos
+    }
+
+    /** Add [item] to play next, honoring on-air priority order. De-dupes by uri. */
     fun enqueueNext(item: Item) {
-        add(item)
-        val idx = items.indexOfFirst { it.uri == item.uri }
-        if (idx >= 0) playNext(idx)
+        val existing = items.indexOfFirst { it.uri == item.uri }
+        if (existing == currentIndex && existing >= 0) return // already playing
+        if (existing >= 0) {
+            items.removeAt(existing)
+            if (existing < currentIndex) currentIndex -= 1
+        }
+        items.add(priorityInsertPos(item.isAi), item)
         save()
     }
 
     /**
-     * Enqueues an on-air spoken audio clip (like an AI RJ chat shoutout or time check)
-     * right after the currently playing song. If other AI shoutouts are already queued
-     * for the end of this song, it places this one in sequence right after them.
+     * Enqueues an on-air spoken AI clip (chat shoutout, time check, …) after the current
+     * song, in sequence behind any clips already waiting — first received airs first.
      */
     fun enqueueAtEndOfCurrentSong(item: Item) {
-        if (items.none { it.uri == item.uri }) {
-            val cur = currentIndex
-            if (cur < 0) {
-                add(item)
-            } else {
-                var insertPos = cur + 1
-                while (insertPos < items.size && (
-                    items[insertPos].title.startsWith("💬") ||
-                    items[insertPos].title.startsWith("Flash News") ||
-                    items[insertPos].artist.contains("Co-Host")
-                )) {
-                    insertPos++
-                }
-                items.add(insertPos, item)
-                save()
-            }
+        if (items.any { it.uri == item.uri }) return
+        if (currentIndex < 0) {
+            add(item)
+            return
         }
+        items.add(priorityInsertPos(item.isAi), item)
+        save()
     }
 
     fun remove(index: Int) {
@@ -352,15 +368,12 @@ object Playlist {
         save()
     }
 
-    /** Move the track at [index] so it plays right after the current track. */
+    /** Move the track at [index] to play next, after any pending priority (AI) items. */
     fun playNext(index: Int) {
         if (index !in items.indices || index == currentIndex) return
         val item = items.removeAt(index)
-        var cur = currentIndex
-        if (index < cur) cur -= 1
-        val target = (cur + 1).coerceIn(0, items.size)
-        items.add(target, item)
-        currentIndex = cur
+        if (index < currentIndex) currentIndex -= 1
+        items.add(priorityInsertPos(item.isAi), item)
         save()
     }
 
@@ -375,21 +388,18 @@ object Playlist {
         save()
     }
 
-    /** Move item at [index] up by one position. */
-    fun moveUp(index: Int) {
-        if (index > 0) move(index, index - 1)
-    }
-
-    /** Move item at [index] down by one position. */
-    fun moveDown(index: Int) {
-        if (index < items.size - 1) move(index, index + 1)
-    }
-
     /** Load + play the item at [index] through the engine and update now-playing. */
     fun play(index: Int, engine: BroadcastEngine, context: Context, startPercent: Float = 0f) {
         initialize(context)
         val item = items.getOrNull(index) ?: return
         currentIndex = index
+        // The "AI MOVED" marker only means "bumped up in the queue". Once we've played
+        // past a bumped track, clear the marker so it doesn't stick on history or replays.
+        for (i in items.indices) {
+            if (i < index && items[i].isAiMoved) {
+                items[i] = items[i].copy(isAiMoved = false)
+            }
+        }
         save()
         engine.selectTrack(context, item.uri, autoPlay = true, startPercent = startPercent)
         engine.setCurrentTrackInfo(item.title, item.artist)
@@ -464,17 +474,12 @@ object Playlist {
         val fromIdx = items.indexOfFirst { it.uri == trackItem.uri }
         if (fromIdx < 0 || fromIdx == currentIndex) return
         val item = items.removeAt(fromIdx)
-        var cur = currentIndex
-        if (fromIdx < cur) cur -= 1
+        if (fromIdx < currentIndex) currentIndex -= 1
 
-        // Position right after any pending AI voice shoutouts at the end of current track
-        var targetPos = (cur + 1).coerceIn(0, items.size)
-        while (targetPos < items.size && items[targetPos].isAi) {
-            targetPos++
-        }
+        // A bumped song request plays after the pending AI clips AND after any other
+        // already-bumped requests, keeping requests in first-come order.
         val movedItem = item.copy(isAiMoved = true)
-        items.add(targetPos, movedItem)
-        currentIndex = cur
+        items.add(priorityInsertPos(false), movedItem)
         save()
     }
 }

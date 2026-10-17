@@ -403,12 +403,6 @@ fun LibraryScreen(modifier: Modifier = Modifier) {
                 Column {
                     DialogAction("Play now") { Playlist.play(idx, engine, context); optionsFor = null }
                     DialogAction("Add to Up Next") { optionsFor = null; confirmUpNext = idx }
-                    if (idx > 0) {
-                        DialogAction("Move up in playlist") { Playlist.moveUp(idx); optionsFor = null }
-                    }
-                    if (idx < Playlist.items.size - 1) {
-                        DialogAction("Move down in playlist") { Playlist.moveDown(idx); optionsFor = null }
-                    }
                     DialogAction("Remove from library", DangerRed) { Playlist.remove(idx); optionsFor = null }
                 }
             },

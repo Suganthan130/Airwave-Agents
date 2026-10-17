@@ -124,7 +124,6 @@ object ChatOnAirManager {
             if (snapshot == null) return@addSnapshotListener
 
             scope.launch(Dispatchers.IO) {
-                val currentPlaying = Playlist.current?.title.orEmpty()
                 val list = mutableListOf<StationChatMessage>()
                 val isFirst = isInitialSnapshot
                 isInitialSnapshot = false
@@ -155,8 +154,12 @@ object ChatOnAirManager {
 
                     val isOldMessage = isFirst || createdAt < (sessionStartTime - 15_000L)
                     val isQueued = queuedMessageIds.contains(id)
-                    val isPlayed = playedMessageIds.contains(id) || (isOldMessage && !isQueued)
-                    val isPlaying = currentPlaying.contains(userName) || (replyText.isNotBlank() && currentPlaying.contains(replyText.take(20)))
+                    // "Played" is ONLY what we actually aired (tracked by id). Old
+                    // messages are no longer falsely flagged as spoken.
+                    val isPlayed = playedMessageIds.contains(id)
+                    // "On air now" is the clip currently playing, matched by its exact
+                    // source message id — not a fuzzy name/title substring.
+                    val isPlaying = Playlist.current?.sourceId == id
 
                     val msg = StationChatMessage(
                         id = id,
@@ -178,12 +181,10 @@ object ChatOnAirManager {
                     )
                     list.add(msg)
 
-                    if (isOldMessage) {
-                        // Old messages from past sessions must NEVER be auto-enqueued!
-                        if (!playedMessageIds.contains(id)) {
-                            playedMessageIds.add(id)
-                        }
-                    } else {
+                    // Old messages (from past sessions / before this session started) are
+                    // never auto-enqueued — but we no longer mark them "played", so their
+                    // badge reflects their real state instead of a false "Spoken".
+                    if (!isOldMessage) {
                         // NEW message that arrived live during the current session!
                         // 1. If message is replied with audio and not yet queued or played -> Auto-enqueue for end of song!
                         if (status == "replied" && replyAudioBase64.isNotBlank() && !isQueued && !isPlayed) {
@@ -213,6 +214,73 @@ object ChatOnAirManager {
     fun stop() {
         listenerRegistration?.remove()
         listenerRegistration = null
+    }
+
+    /**
+     * One-shot manual refresh: re-fetches the latest messages from the server and
+     * updates [messagesFlow]. Backs the "refresh" button for when the realtime feed
+     * looks stale. Display-only — it does not change on-air queue/play state, so it
+     * can never double-air a message.
+     */
+    fun refresh(context: Context, stationId: String, scope: CoroutineScope) {
+        if (stationId.isBlank()) return
+        loadPrefs(context)
+        val db = FirebaseFirestore.getInstance()
+        db.collection("messages")
+            .orderBy("createdAt", Query.Direction.DESCENDING)
+            .limit(50)
+            .get()
+            .addOnSuccessListener { snapshot ->
+                scope.launch(Dispatchers.IO) {
+                    val list = snapshot.documents
+                        .mapNotNull { doc -> docToMessage(doc, stationId) }
+                        .sortedByDescending { it.createdAt }
+                    _messagesFlow.value = list
+                    Log.i(TAG, "Manual refresh loaded ${list.size} messages")
+                }
+            }
+            .addOnFailureListener { e ->
+                Log.w(TAG, "Manual refresh failed: ${e.message}")
+            }
+    }
+
+    /** Parses a Firestore doc into a display [StationChatMessage], or null if it is for another station. */
+    private fun docToMessage(
+        doc: com.google.firebase.firestore.DocumentSnapshot,
+        stationId: String,
+    ): StationChatMessage? {
+        val sId = doc.getString("stationId") ?: "global"
+        if (!sId.trim().equals(stationId.trim(), ignoreCase = true) &&
+            !sId.trim().equals("global", ignoreCase = true)
+        ) return null
+
+        val id = doc.id
+        val userName = doc.getString("userName") ?: "Listener"
+        val replyText = doc.getString("replyText") ?: ""
+        val createdAt = runCatching { doc.getTimestamp("createdAt")?.toDate()?.time }.getOrNull()
+            ?: runCatching { doc.getLong("createdAt") }.getOrNull()
+            ?: runCatching { doc.getDouble("createdAt")?.toLong() }.getOrNull()
+            ?: runCatching { doc.getString("createdAt")?.toLongOrNull() }.getOrNull()
+            ?: System.currentTimeMillis()
+
+        return StationChatMessage(
+            id = id,
+            stationId = sId,
+            userId = doc.getString("userId") ?: "",
+            userName = userName,
+            userCountry = doc.getString("userCountry") ?: "Global",
+            text = doc.getString("text") ?: "",
+            status = doc.getString("status") ?: "queued",
+            replyText = replyText,
+            replyAudioBase64 = doc.getString("replyAudioBase64") ?: "",
+            createdAt = createdAt,
+            isQueuedOnAir = queuedMessageIds.contains(id),
+            isPlayingOnAir = Playlist.current?.sourceId == id,
+            isPlayedOnAir = playedMessageIds.contains(id),
+            isSongRequest = doc.getBoolean("isSongRequest") ?: false,
+            songFound = doc.getBoolean("songFound") ?: false,
+            requestedSongTitle = doc.getString("requestedSongTitle") ?: "",
+        )
     }
 
     /**
@@ -260,6 +328,7 @@ object ChatOnAirManager {
                 title = title,
                 artist = artist,
                 durationMs = durationMs,
+                sourceId = msg.id,
             )
 
             // 1. Enqueue shoutout right after the currently playing song in Playlist queue
@@ -384,6 +453,7 @@ object ChatOnAirManager {
                     title = title,
                     artist = msg.replyText,
                     durationMs = durationMs,
+                    sourceId = msg.id,
                 )
 
                 val cur = Playlist.current
