@@ -10,16 +10,22 @@ Welcome to the **Airwave Agents** guide directory! This collection of documents 
 |---|---|
 | 📜 [**Example Chats & Test Prompts**](EXAMPLE_CHATS.md) | Ready-to-use sample listener chat messages in English and Tamil for testing song requests (in library and not in library), time inquiries, celebrations/birthdays, banter, and safety filters. |
 | 🎵 [**Song Requests & Dynamic Play Next Guide**](SONG_REQUESTS_GUIDE.md) | In-depth architectural breakdown and step-by-step testing instructions for the Gemini-powered listener song request feature. |
-| 🛠️ [**Features & System Testing Guide**](FEATURES_TESTING_GUIDE.md) | Testing instructions for AI Full Takeover (Auto-Pilot), Real-time Breaking News pop-ups, Dynamic Time Checks, RJ Voice customization, and Firestore synchronization. |
+| 🛠️ [**Features & System Testing Guide**](FEATURES_TESTING_GUIDE.md) | Testing instructions for AI Full Takeover (Auto-Pilot), real-time Breaking News pop-ups (live Hiru News feed), Dynamic Time Checks, RJ Voice customization, and Firestore synchronization. |
+| 🔐 [**Authentication Guide**](AUTHENTICATION_GUIDE.md) | Ready-to-use demo broadcaster and listener accounts for evaluating the transmitter and web listener portal. |
 
 ---
 
-## Testing Accounts
+## Demo Accounts
 
-| Role | Email | Password | Details |
-|---|---|---|---|
-| **Broadcaster** (Android) | `test@radiostreamhub.com` | `Test@147!` | Pre-configured with live Icecast station, 10 tracks, and broadcast stream. |
-| **Listener** (Web) | `listener@radiostreamhub.com` | `PublicTest@147!` | Pre-configured with UK profile (`United Kingdom` 🇬🇧). |
+Ready-to-use demo accounts for evaluation. The **broadcaster** account runs the
+transmitter (Android app & web); the **listener** account tunes in from the browser.
+
+👉 **All demo credentials are in the [Authentication Guide](AUTHENTICATION_GUIDE.md)** —
+the single source of truth for the test emails and passwords.
+
+**Demo station references (not secret):**
+- **Station UID:** `BtA8T6KYxuZf8bxFNKleilheS9v1`
+- **Public listener page:** https://airwave-agents.web.app/?station=BtA8T6KYxuZf8bxFNKleilheS9v1
 
 ---
 
