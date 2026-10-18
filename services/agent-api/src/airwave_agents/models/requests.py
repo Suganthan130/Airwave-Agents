@@ -55,3 +55,7 @@ class FlashNewsRequest(BaseModel):
     content: Optional[str] = Field(default="", description="Story details / background")
     voice: Optional[str] = Field(default=None, description="Voice ID or style")
     speakingRate: Optional[float] = Field(default=1.0, ge=0.5, le=2.0)
+
+
+class NewsFeedRequest(BaseModel):
+    limit: Optional[int] = Field(default=24, ge=1, le=60, description="Maximum number of news stories to return")

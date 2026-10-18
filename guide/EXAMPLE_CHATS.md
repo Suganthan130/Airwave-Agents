@@ -6,6 +6,15 @@ Use these messages in the Listener Web App chat (`https://airwave-agents.web.app
 
 ---
 
+## Testing Accounts
+
+| Role | Email | Password | Details |
+|---|---|---|---|
+| **Broadcaster (Android)** | `test@radiostreamhub.com` | `Test@147!` | Pre-configured with live Icecast stream, settings, and library. |
+| **Listener (Web)** | `listener@radiostreamhub.com` | `PublicTest@147!` | Pre-configured with UK profile (`United Kingdom` 🇬🇧). |
+
+---
+
 ## 1. Song Requests — Songs IN Playlist (Move to Play Next + RJ Dedication)
 
 When a listener requests any of the pre-loaded songs below, Gemini detects the request, verifies that the track is in the library, has the AI RJ introduce the song with a personal dedication on-air, and automatically moves the track to play next!

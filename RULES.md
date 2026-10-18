@@ -12,8 +12,7 @@ Conventions for working in the Airwave Agents repository.
 
 - Backend code lives in `services/agent-api/`.
 - Web client lives in `apps/web/`.
-- Android integration (not the app itself) lives in `integrations/android/`.
-- Infrastructure config lives in `infra/`.
+- Android transmitter app lives in `apps/android/transmiter/`.
 - The private Android app source is kept out of this repository.
 
 ## Robustness — handle every state

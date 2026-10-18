@@ -10,6 +10,10 @@ PROJECT_ID = (
 )
 LOCATION = os.getenv("GOOGLE_CLOUD_LOCATION", "us-central1")
 
+# Gemini LLM model (Vertex AI). Overridable via env for cost tuning / rollback.
+# gemini-2.5-flash: high-speed, cost-efficient Flash tier with full Vertex AI regional availability.
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+
 RJ_VOICE = "en-US-Chirp3-HD-Leda"
 
 VOICE_MAP = {

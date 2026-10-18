@@ -4,6 +4,7 @@ import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from airwave_agents.api.router import router
+from airwave_agents.core.config import GEMINI_MODEL
 from airwave_agents.core.firebase import get_firestore
 
 logging.basicConfig(
@@ -42,7 +43,7 @@ async def root():
     return {
         "service": "Airwave Agents API",
         "runtime": "Google Cloud Run",
-        "model": "gemini-2.5-flash",
+        "model": GEMINI_MODEL,
         "status": "online",
         "version": "1.0.0",
     }

@@ -14,7 +14,7 @@ stay live 24/7, engaging listeners in their own language, on top of our Icecast/
 streaming stack.
 
 **Two clients:**
-- **Android app (`integrations/transmiter/`) — the transmitter.** Broadcasters push the live
+- **Android app (`apps/android/transmiter/`) — the transmitter.** Broadcasters push the live
   stream (co-host mixed in) to Icecast/Shoutcast. Kotlin + C++/NDK.
 - **Web app (`apps/web/`) — for listeners.** The audience tunes in from the browser.
 
@@ -24,9 +24,9 @@ streaming stack.
 - `services/agent-api/` — backend co-host brain (Python, Cloud Run). Source under
   `src/airwave_agents/{api,core,services,models}/`, tests under `tests/`.
 - `apps/web/` — listener web app; static assets under `public/`.
-- `integrations/transmiter/` — Android transmitter app (public).
-- `integrations/core-app/` — **private git submodule** (`BroadcastMySelf-Radio-Tool`). See below.
-- `infra/` — `firebase/` and `gcp/` config. `scripts/` — ops/dev scripts. `docs/` — documentation.
+- `apps/android/transmiter/` — Android transmitter app (public).
+- `apps/android/core-app/` — **private git submodule** (`BroadcastMySelf-Radio-Tool`). See below.
+- `docs/` — documentation.
 
 When adding to the LLM/Gemini layer, default to the latest Claude/Gemini models and keep
 provider calls in `services/agent-api/`, not in clients.
@@ -35,8 +35,8 @@ provider calls in `services/agent-api/`, not in clients.
 
 - **Never commit secrets:** `.env`, API keys, `*service-account*.json`, `google-services.json`,
   keystores (`.jks`, `.keystore`), `.firebaserc`, `local.properties`. The root and
-  `integrations/transmiter/` `.gitignore` files already cover these — don't weaken them.
-- **The core app stays private.** `integrations/core-app/` is a submodule; this repo commits only
+  `apps/android/transmiter/` `.gitignore` files already cover these — don't weaken them.
+- **The core app stays private.** `apps/android/core-app/` is a submodule; this repo commits only
   a pointer, never its source. Do not copy the private app's source into this repo, and do not
   make changes inside the submodule checkout as part of public-repo work.
 - **Keep clients secret-free.** Credentials load from the environment/server at runtime, never

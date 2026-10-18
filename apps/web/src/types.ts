@@ -32,28 +32,30 @@ export interface ChatMessage {
 
 export interface BroadcasterStation {
   stationId: string;
-  broadcasterId: string;
-  uniqueId?: string;
+  stationTitle: string;
   broadcasterName: string;
   broadcasterEmail?: string;
-  stationTitle: string;
   host?: string;
   port?: string;
   serverType?: string;
   mount?: string;
-  publicListeningUrl?: string;
-  publicPageUrl?: string;
   streamUrl: string;
+  publicPageUrl?: string;
   isLive: boolean;
   nowPlayingTrack?: string;
   nowPlayingArtist?: string;
   listenersCount?: number;
-  rjVoice?: number;
   voice?: string;
-  rjSpeed?: number;
   speakingRate?: number;
   aiPersona?: string;
+  playlist?: any[];
   updatedAt?: number;
+  // Legacy compatibility aliases
+  broadcasterId?: string;
+  uniqueId?: string;
+  publicListeningUrl?: string;
+  rjVoice?: number;
+  rjSpeed?: number;
 }
 
 
