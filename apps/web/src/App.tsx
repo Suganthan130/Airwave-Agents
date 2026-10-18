@@ -28,6 +28,10 @@ import { AuthModal } from "./components/AuthModal.tsx";
 import { Sparkles, Headphones, ShieldCheck, Crown, Radio as RadioIcon, Share2, Check, WifiOff, AlertCircle, X } from "lucide-react";
 import { copyText } from "./lib/clipboard.ts";
 
+// Default station loaded when the site is opened without a ?station= param,
+// so https://airwave-agents.web.app/ tunes straight into the demo station.
+const DEMO_STATION_ID = "BtA8T6KYxuZf8bxFNKleilheS9v1";
+
 // Validates that a stream URL is a public listener endpoint, rejecting transmitter source mounts
 const isValidPublicStream = (url?: string | null): boolean => {
   if (!url || typeof url !== "string") return false;
@@ -74,7 +78,7 @@ export const App: React.FC = () => {
   // Active station ID from URL query ?station=UID or auto-detected
   const [activeStationId, setActiveStationId] = useState<string | null>(() => {
     const params = new URLSearchParams(window.location.search);
-    return params.get("station") || null;
+    return params.get("station") || DEMO_STATION_ID;
   });
 
   const [stations, setStations] = useState<BroadcasterStation[]>([]);

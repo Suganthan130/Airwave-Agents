@@ -316,6 +316,17 @@ fun HomeScreen(modifier: Modifier = Modifier) {
         Playlist.current?.let { item ->
             engine.setCurrentTrackInfo(item.title, item.artist)
         }
+        // First open: seed the library with the bundled demo songs so a broadcaster
+        // can go live right away without importing music first. Runs once ever.
+        val seeded = withContext(Dispatchers.IO) {
+            runCatching { Playlist.loadDefaultTracksOnFirstOpen(context) }.getOrDefault(0)
+        }
+        if (seeded > 0) {
+            Playlist.current?.let { item ->
+                engine.setCurrentTrackInfo(item.title, item.artist)
+            }
+            toast("Added $seeded demo songs to your library")
+        }
     }
 
     // Automatically pop news dialog every 1 minute while user is live on-air

@@ -101,6 +101,8 @@ object Playlist {
     private var appContext: Context? = null
     private var isLoaded = false
     private const val FILE_NAME = "airwave_playlist.json"
+    private const val FIRST_OPEN_PREFS = "airwave_playlist_prefs"
+    private const val KEY_DEFAULTS_SEEDED = "defaults_seeded_on_first_open"
 
     /**
      * Initializes playlist state from local storage on app start.
@@ -203,6 +205,27 @@ object Playlist {
             save()
         }
         return addedCount
+    }
+
+    /**
+     * On the very first app open, seeds the library with the bundled royalty-free
+     * tracks so a broadcaster can go live immediately without importing music first.
+     * Runs at most once ever: the flag is set after the first attempt, so a user who
+     * later clears their library is never re-seeded. Skips seeding (but still marks
+     * done) when the library already has the user's own music. Returns the number of
+     * tracks added. Performs asset file I/O — call off the main thread.
+     */
+    fun loadDefaultTracksOnFirstOpen(context: Context): Int {
+        val prefs = context.applicationContext
+            .getSharedPreferences(FIRST_OPEN_PREFS, Context.MODE_PRIVATE)
+        if (prefs.getBoolean(KEY_DEFAULTS_SEEDED, false)) return 0
+        val added = if (musicTracks.isEmpty()) {
+            loadDefaultTracksFromAssets(context, force = false)
+        } else {
+            0
+        }
+        prefs.edit().putBoolean(KEY_DEFAULTS_SEEDED, true).apply()
+        return added
     }
 
     /**
