@@ -5,7 +5,9 @@ and the **listener** web app (browser).
 
 ## 📻 Broadcaster (Android transmitter)
 
-- **File:** [`broadcaster-demo-version.apk`](./broadcaster-demo-version.apk)
+- **Download (hosted):** https://airwave-agents.web.app/broadcaster-demo-version.apk
+- **In git:** [`demo-apps/broadcaster-demo-version.apk`](./broadcaster-demo-version.apk)
+  (also mirrored to `apps/web/public/` so each `vite build` re-publishes it to hosting).
 - **Install:** download the APK to an Android device and open it. You may need to
   allow "Install unknown apps" for your browser/file manager.
 - On first open the library is auto-seeded with royalty-free demo songs, so you
