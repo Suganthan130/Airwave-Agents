@@ -22,7 +22,7 @@ from airwave_agents.models.responses import (
 from airwave_agents.services.gemini import generate_rj_text, generate_rj_chat_reply
 from airwave_agents.services.tts import synthesize_mp3
 from airwave_agents.services.chat import process_one_message
-from airwave_agents.services.news_feed import fetch_hiru_news
+from airwave_agents.services.news_feed import get_news_with_backup
 
 logger = logging.getLogger(__name__)
 
@@ -223,10 +223,11 @@ async def get_news_feed(req: NewsFeedRequest = NewsFeedRequest()):
     """Fetches the latest real Sri Lankan news stories from Hiru News for the News Studio."""
     limit = req.limit or 24
     try:
-        items = await fetch_hiru_news(limit=limit)
+        items, from_backup = await get_news_with_backup(limit=limit)
         if not items:
             raise HTTPException(status_code=502, detail="No news stories available from Hiru right now.")
-        return NewsFeedResponse(source="Hiru News", count=len(items), items=items)
+        source = "Hiru News (cached)" if from_backup else "Hiru News"
+        return NewsFeedResponse(source=source, count=len(items), items=items)
     except HTTPException:
         raise
     except Exception as e:

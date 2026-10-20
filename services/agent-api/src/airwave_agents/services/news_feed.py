@@ -14,9 +14,16 @@ import re
 
 import httpx
 
+from airwave_agents.core.firebase import get_firestore
+
 logger = logging.getLogger(__name__)
 
 HIRU_BASE = "https://hirunews.lk/goldfmnews"
+
+# Firestore backup location: the last successful Hiru fetch, reused when a live
+# fetch comes back empty (cold start, transient network error, or markup change).
+_BACKUP_COLLECTION = "news_cache"
+_BACKUP_DOC = "hiru_latest"
 
 # Category listing page -> display label shown in the app.
 CATEGORY_PAGES: dict[str, str] = {
@@ -88,13 +95,20 @@ async def fetch_hiru_news(limit: int = 24) -> list[dict]:
     ) as client:
 
         async def grab(page: str, label: str) -> list[dict]:
-            try:
-                resp = await client.get(f"{HIRU_BASE}/{page}")
-                resp.raise_for_status()
-                return _parse_page(resp.text, label)
-            except Exception as e:  # network error, non-200, or markup change
-                logger.warning(f"Hiru fetch failed for {page}: {e}")
-                return []
+            # Hiru is flaky on the first hit (cold start / transient timeout), so
+            # retry a few times with a short backoff before giving up on a page.
+            last_err: Exception | None = None
+            for attempt in range(3):
+                try:
+                    resp = await client.get(f"{HIRU_BASE}/{page}")
+                    resp.raise_for_status()
+                    return _parse_page(resp.text, label)
+                except Exception as e:  # network error, non-200, or markup change
+                    last_err = e
+                    if attempt < 2:
+                        await asyncio.sleep(0.6 * (attempt + 1))
+            logger.warning(f"Hiru fetch failed for {page} after 3 attempts: {last_err}")
+            return []
 
         pools = await asyncio.gather(
             *[grab(page, label) for page, label in CATEGORY_PAGES.items()]
@@ -116,3 +130,53 @@ async def fetch_hiru_news(limit: int = 24) -> list[dict]:
     for order, item in enumerate(merged, start=1):
         item["order"] = order
     return merged
+
+
+def _save_backup(items: list[dict]) -> None:
+    """Persists the latest good feed to Firestore so it can be served if a later
+    fetch fails. Best-effort: a Firestore error is logged, never raised."""
+    if not items:
+        return
+    db = get_firestore()
+    if not db:
+        return
+    try:
+        from firebase_admin import firestore
+
+        db.collection(_BACKUP_COLLECTION).document(_BACKUP_DOC).set(
+            {"items": items, "updatedAt": firestore.SERVER_TIMESTAMP}
+        )
+    except Exception as e:
+        logger.warning(f"Could not save news backup to Firestore: {e}")
+
+
+def _load_backup(limit: int) -> list[dict]:
+    """Reads the last saved feed from Firestore. Returns [] if none or on error."""
+    db = get_firestore()
+    if not db:
+        return []
+    try:
+        snap = db.collection(_BACKUP_COLLECTION).document(_BACKUP_DOC).get()
+        if not snap.exists:
+            return []
+        items = (snap.to_dict() or {}).get("items") or []
+        return items[:limit]
+    except Exception as e:
+        logger.warning(f"Could not load news backup from Firestore: {e}")
+        return []
+
+
+async def get_news_with_backup(limit: int = 24) -> tuple[list[dict], bool]:
+    """Fetches live Hiru news, falling back to the Firestore backup when the live
+    fetch comes back empty.
+
+    Returns ``(items, from_backup)``: a successful live fetch is also saved to
+    Firestore for next time; an empty live fetch serves the last saved feed.
+    """
+    items = await fetch_hiru_news(limit=limit)
+    if items:
+        _save_backup(items)
+        return items, False
+
+    logger.warning("Hiru live fetch returned no stories; serving Firestore backup.")
+    return _load_backup(limit), True
