@@ -70,8 +70,8 @@ def test_news_feed_endpoint(monkeypatch):
         ]
 
     monkeypatch.setattr(news_feed, "fetch_hiru_news", fake_fetch)
-    # Router imported the symbol directly, so patch it there too.
-    monkeypatch.setattr("airwave_agents.api.router.fetch_hiru_news", fake_fetch)
+    # Backup save is best-effort; skip the real Firestore write in tests.
+    monkeypatch.setattr(news_feed, "_save_backup", lambda items: None)
 
     resp = client.post("/api/v1/news-feed", json={"limit": 5})
     assert resp.status_code == 200
@@ -82,11 +82,41 @@ def test_news_feed_endpoint(monkeypatch):
     assert data["items"][0]["title"] == "Test story"
 
 
-def test_news_feed_endpoint_empty_returns_502(monkeypatch):
+def test_news_feed_endpoint_serves_backup_when_live_empty(monkeypatch):
+    """Live fetch fails/empty -> endpoint serves the Firestore backup as cached."""
     async def empty_fetch(limit: int = 24):
         return []
 
-    monkeypatch.setattr("airwave_agents.api.router.fetch_hiru_news", empty_fetch)
+    backup = [
+        {
+            "id": "hiru_backup",
+            "title": "Saved story",
+            "description": "From Firestore",
+            "category": "Local",
+            "published": "yesterday",
+            "link": "https://hirunews.lk/goldfmnews/9/saved",
+            "order": 1,
+        }
+    ]
+
+    monkeypatch.setattr(news_feed, "fetch_hiru_news", empty_fetch)
+    monkeypatch.setattr(news_feed, "_load_backup", lambda limit: backup[:limit])
+
+    resp = client.post("/api/v1/news-feed", json={"limit": 5})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["source"] == "Hiru News (cached)"
+    assert data["count"] == 1
+    assert data["items"][0]["id"] == "hiru_backup"
+
+
+def test_news_feed_endpoint_empty_returns_502(monkeypatch):
+    """Live fetch empty AND no backup available -> 502."""
+    async def empty_fetch(limit: int = 24):
+        return []
+
+    monkeypatch.setattr(news_feed, "fetch_hiru_news", empty_fetch)
+    monkeypatch.setattr(news_feed, "_load_backup", lambda limit: [])
 
     resp = client.post("/api/v1/news-feed", json={})
     assert resp.status_code == 502
